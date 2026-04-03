@@ -30,6 +30,27 @@ def _get_tax_config(user):
         return None
 
 
+def _build_ore_rows(moon):
+    """
+    Return a list of dicts for the ore composition table on moon_detail,
+    sorted by fraction descending.  Each dict has: name, type_id, fraction, rarity, tier.
+    """
+    from .constants import MOON_ORE_NAMES, MOON_ORE_RARITY, RARITY_TIER_LABEL
+    rows = []
+    for tid_str, frac in moon.ore_composition.items():
+        tid = int(tid_str)
+        rarity = MOON_ORE_RARITY.get(tid, "")
+        rows.append({
+            "name": MOON_ORE_NAMES.get(tid, f"Unknown ({tid})"),
+            "type_id": tid,
+            "fraction": frac,
+            "rarity": rarity,
+            "tier": RARITY_TIER_LABEL.get(rarity, ""),
+        })
+    rows.sort(key=lambda r: -r["fraction"])
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # Main views
 # ---------------------------------------------------------------------------
@@ -82,6 +103,7 @@ def moon_detail(request, moon_id):
         ),
         "table": table,
         "fleet_share_pct": fleet_share_pct,
+        "ore_rows": _build_ore_rows(moon),
     }
     return render(request, "moonmaster/moon_detail.html", context)
 

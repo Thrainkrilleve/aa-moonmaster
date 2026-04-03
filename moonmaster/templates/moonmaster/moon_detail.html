@@ -10,7 +10,13 @@
     </ol>
   </nav>
 
-  <h2><i class="fas fa-moon me-2"></i>{{ moon.name }}</h2>
+  <h2><i class="fas fa-moon me-2"></i>{{ moon.name }}
+    {% if moon.rarity_class %}
+      <span class="badge mm-rarity-{{ moon.rarity_class }} ms-2" style="font-size:0.6em;vertical-align:middle;">
+        {{ moon.get_rarity_class_display }}
+      </span>
+    {% endif %}
+  </h2>
   <p class="text-muted">{{ moon.solar_system_name }}{% if moon.region_name %} &mdash; {{ moon.region_name }}{% endif %}</p>
 
   <div class="row g-3 mb-4">
@@ -19,17 +25,22 @@
       <div class="card h-100">
         <div class="card-header fw-bold">{% trans "Ore Composition" %}</div>
         <div class="card-body">
-          {% if moon.ore_composition %}
+          {% if ore_rows %}
             <table class="table table-sm">
-              <thead><tr><th>{% trans "Type ID" %}</th><th>{% trans "Fraction" %}</th></tr></thead>
+              <thead><tr><th>{% trans "Ore" %}</th><th>{% trans "Tier" %}</th><th>{% trans "Fraction" %}</th></tr></thead>
               <tbody>
-                {% for tid, frac in moon.ore_composition.items %}
+                {% for ore in ore_rows %}
                 <tr>
-                  <td>{{ tid }}</td>
+                  <td class="fw-semibold">{{ ore.name }}</td>
                   <td>
+                    {% if ore.rarity %}
+                      <span class="badge mm-rarity-{{ ore.rarity }}">{{ ore.tier }}</span>
+                    {% endif %}
+                  </td>
+                  <td style="min-width:160px;">
                     <div class="progress" style="height:18px;">
-                      <div class="progress-bar bg-warning text-dark" style="width:{% widthratio frac 1 100 %}%">
-                        {% widthratio frac 1 100 %}%
+                      <div class="progress-bar mm-rarity-{{ ore.rarity }}" style="width:{% widthratio ore.fraction 1 100 %}%">
+                        {% widthratio ore.fraction 1 100 %}%
                       </div>
                     </div>
                   </td>

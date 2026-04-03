@@ -31,9 +31,13 @@
             <td>{{ moon.solar_system_name }}</td>
             <td>{{ moon.region_name|default:"—" }}</td>
             <td>
-              <span class="badge mm-rarity-{{ moon.rarity_class }}">
-                {{ moon.get_rarity_class_display|default:moon.rarity_class }}
+              {% if moon.rarity_class %}
+              <span class="badge mm-rarity-{{ moon.rarity_class }}" title="{{ moon.get_rarity_class_display }}">
+                {{ moon.get_rarity_class_display }}
               </span>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
             </td>
             <td>{{ moon.structures.count }}</td>
             <td>

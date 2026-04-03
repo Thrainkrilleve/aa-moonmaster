@@ -68,12 +68,21 @@ RARITY_RARE = "rare"
 RARITY_EXCEPTIONAL = "exceptional"
 
 RARITY_CHOICES = [
-    (RARITY_UBIQUITOUS, "Ubiquitous"),
-    (RARITY_COMMON, "Common"),
-    (RARITY_UNCOMMON, "Uncommon"),
-    (RARITY_RARE, "Rare"),
-    (RARITY_EXCEPTIONAL, "Exceptional"),
+    (RARITY_UBIQUITOUS, "R4 — Ubiquitous"),
+    (RARITY_COMMON,     "R8 — Common"),
+    (RARITY_UNCOMMON,   "R16 — Uncommon"),
+    (RARITY_RARE,       "R32 — Rare"),
+    (RARITY_EXCEPTIONAL,"R64 — Exceptional"),
 ]
+
+# Human-readable R-tier label for each rarity class
+RARITY_TIER_LABEL: dict = {
+    RARITY_UBIQUITOUS:  "R4",
+    RARITY_COMMON:      "R8",
+    RARITY_UNCOMMON:    "R16",
+    RARITY_RARE:        "R32",
+    RARITY_EXCEPTIONAL: "R64",
+}
 
 # ---------------------------------------------------------------------------
 # ESI type IDs for fuel / gas used by Metenox
@@ -94,6 +103,37 @@ FUEL_BLOCK_TYPE_IDS = [
     ESI_TYPE_ID_HELIUM_FUEL_BLOCK,
     ESI_TYPE_ID_OXYGEN_FUEL_BLOCK,
 ]
+
+# ---------------------------------------------------------------------------
+# Moon ore type_id → human-readable name
+# ---------------------------------------------------------------------------
+MOON_ORE_NAMES: dict = {
+    # R4 Ubiquitous
+    45490: "Zeolites",
+    45491: "Sylvite",
+    45492: "Bitumens",
+    45493: "Coesite",
+    # R8 Common
+    45494: "Cobaltite",
+    45495: "Euxenite",
+    45496: "Titanite",
+    45497: "Scheelite",
+    # R16 Uncommon
+    45498: "Otavite",
+    45499: "Sperrylite",
+    45500: "Vanadinite",
+    45501: "Chromite",
+    # R32 Rare
+    45502: "Carnotite",
+    45503: "Zircon",
+    45504: "Loparite",
+    45505: "Monazite",
+    # R64 Exceptional
+    45506: "Xenotime",
+    45507: "Ytterbite",
+    45508: "Pollucite",
+    45509: "Cinnabar",
+}
 
 # ---------------------------------------------------------------------------
 # Moon ore type_id → rarity class (for survey import auto-classification)
