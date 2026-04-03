@@ -153,6 +153,13 @@ def _sync_owner_structures(owner):
             if svc.get("state") == "online"
         ))
 
+        # Reinforce / state fields
+        raw_state = s.get("state", "unknown")
+        state_timer_end_str = s.get("state_timer_end")
+        state_timer_end = parse_datetime(state_timer_end_str) if state_timer_end_str else None
+        unanchors_at_str = s.get("unanchors_at")
+        unanchors_at = parse_datetime(unanchors_at_str) if unanchors_at_str else None
+
         obj, _ = Structure.objects.update_or_create(
             structure_id=s["structure_id"],
             defaults={
@@ -162,6 +169,12 @@ def _sync_owner_structures(owner):
                 "is_online": is_online,
                 "fuel_expires": fuel_expires,
                 "fuel_blocks_per_hour": fuel_per_hr,
+                "state": raw_state,
+                "state_timer_end": state_timer_end,
+                "reinforce_hour": s.get("reinforce_hour"),
+                "reinforce_weekday": s.get("reinforce_weekday"),
+                "services_raw": services,
+                "unanchors_at": unanchors_at,
             },
         )
         if obj.moon_id is None:

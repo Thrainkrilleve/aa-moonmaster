@@ -14,7 +14,7 @@ from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
 
 from .calculator import MoonProfitCalculator
 from .models import Extraction, Moon, Structure, StructureOwner, TaxConfig
-from .constants import PRICE_SOURCE_ESI, STRUCTURE_TYPE_METENOX
+from .constants import PRICE_SOURCE_ESI, STRUCTURE_TYPE_METENOX, STRUCTURE_TYPE_ATHANOR, REINFORCE_STATES
 
 
 # ---------------------------------------------------------------------------
@@ -60,10 +60,24 @@ def _build_ore_rows(moon):
 @login_required
 @permission_required("moonmaster.basic_access", raise_exception=True)
 def dashboard(request):
+    reinforce_list = list(
+        Structure.objects.filter(state__in=list(REINFORCE_STATES))
+        .select_related("moon", "owner__corporation")
+        .order_by("state")  # hull_reinforce sorts before armor_reinforce alphabetically
+    )
+    fuel_critical = list(
+        Structure.objects.filter(
+            fuel_expires__isnull=False,
+            fuel_expires__lte=timezone.now() + timedelta(hours=48),
+        ).select_related("moon", "owner__corporation").order_by("fuel_expires")
+    )
     context = {
         "moon_count": Moon.objects.count(),
         "structure_count": Structure.objects.count(),
         "metenox_count": Structure.objects.filter(structure_type=STRUCTURE_TYPE_METENOX).count(),
+        "reinforce_count": len(reinforce_list),
+        "reinforce_structures": reinforce_list,
+        "fuel_critical": fuel_critical,
         "upcoming_extractions": Extraction.objects.filter(
             status__in=[Extraction.Status.SCHEDULED, Extraction.Status.READY]
         ).select_related("structure__moon").order_by("chunk_arrival_time")[:10],
@@ -151,6 +165,28 @@ def metenox_list(request):
     ).select_related("moon", "owner__corporation").order_by("moon__solar_system_name")
     context = {"structures": structures}
     return render(request, "moonmaster/metenox_list.html", context)
+
+
+@login_required
+@permission_required("moonmaster.basic_access", raise_exception=True)
+def structure_list(request):
+    """Unified view of all tracked structures (Athanor + Metenox) with full status."""
+    structures = (
+        Structure.objects
+        .select_related("moon", "owner__corporation")
+        .order_by("owner__corporation__corporation_name", "name")
+    )
+    reinforce_count = sum(1 for s in structures if s.is_reinforced)
+    fuel_critical_count = sum(
+        1 for s in structures
+        if s.fuel_expires and (s.fuel_expires - timezone.now()).total_seconds() < 48 * 3600
+    )
+    context = {
+        "structures": structures,
+        "reinforce_count": reinforce_count,
+        "fuel_critical_count": fuel_critical_count,
+    }
+    return render(request, "moonmaster/structure_list.html", context)
 
 
 @login_required

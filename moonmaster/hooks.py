@@ -38,6 +38,7 @@ def register_urls():
             "moonmaster.views.moon_detail",
             "moonmaster.views.extractions",
             "moonmaster.views.metenox_list",
+            "moonmaster.views.structure_list",
             "moonmaster.views.reports",
             "moonmaster.views.manage_owners",
             "moonmaster.views.add_owner",

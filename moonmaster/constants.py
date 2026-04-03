@@ -226,3 +226,44 @@ MOON_ORE_RARITY: dict = {
     45508: RARITY_EXCEPTIONAL,  # Pollucite
     45509: RARITY_EXCEPTIONAL,  # Cinnabar
 }
+
+# ---------------------------------------------------------------------------
+# Structure state / reinforce constants
+# ---------------------------------------------------------------------------
+
+# States where the structure is actively being reinforced
+REINFORCE_STATES = frozenset(["armor_reinforce", "hull_reinforce"])
+
+# ESI state string → (display label, Bootstrap colour class)
+STRUCTURE_STATE_LABELS: dict = {
+    "shield_vulnerable":    ("Online",          "success"),
+    "armor_vulnerable":     ("Online",          "success"),
+    "hull_vulnerable":      ("Online",          "success"),
+    "online_deprecated":    ("Online",          "success"),
+    "onlining_vulnerable":  ("Coming Online",   "warning"),
+    "armor_reinforce":      ("Armor Reinforce", "danger"),
+    "hull_reinforce":       ("Hull Reinforce",  "danger"),
+    "anchor_vulnerable":    ("Anchoring",       "warning"),
+    "anchoring":            ("Anchoring",       "warning"),
+    "deploy_vulnerable":    ("Deploying",       "warning"),
+    "fitting_invulnerable": ("Fitting",         "info"),
+    "unanchored":           ("Unanchored",      "secondary"),
+    "offline":              ("Offline",         "secondary"),
+    "unknown":              ("Unknown",         "secondary"),
+}
+
+# Human-readable names for ESI service module name strings
+SERVICE_DISPLAY_NAMES: dict = {
+    "moon_drilling":         "Moon Drill",
+    "metenox_moon_drill":    "Metenox Drill",
+    "manufacturing":         "Manufacturing",
+    "invention":             "Invention",
+    "laboratory":            "Research Lab",
+    "composite_reactions":   "Composite Reactions",
+    "hybrid_reactions":      "Hybrid Reactions",
+    "biochemical_reactions": "Biochemical Reactions",
+    "reprocessing":          "Reprocessing",
+    "compression":           "Compression",
+    "cloning":               "Cloning",
+    "market":                "Market Hub",
+}

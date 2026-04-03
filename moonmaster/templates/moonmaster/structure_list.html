@@ -1,0 +1,232 @@
+{% extends "moonmaster/base.html" %}
+{% load i18n moonmaster_tags %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h2 class="mb-0"><i class="fas fa-building me-2"></i>{% trans "Structures" %}</h2>
+    {% if perms.moonmaster.manage_moons %}
+    <form method="post" action="{% url 'moonmaster:sync_all_now' %}">{% csrf_token %}
+      <button type="submit" class="btn btn-success btn-sm">
+        <i class="fas fa-sync me-1"></i>{% trans "Sync All" %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  {# ── Alert banners ───────────────────────────────────────────────────── #}
+  {% if reinforce_count %}
+  <div class="alert alert-danger d-flex align-items-center gap-2 mb-3">
+    <i class="fas fa-exclamation-triangle fa-lg"></i>
+    <div>
+      <strong>{{ reinforce_count }} structure{{ reinforce_count|pluralize }} in REINFORCE</strong>
+      — check the table below immediately!
+    </div>
+  </div>
+  {% endif %}
+
+  {% if fuel_critical_count %}
+  <div class="alert alert-warning d-flex align-items-center gap-2 mb-3">
+    <i class="fas fa-gas-pump fa-lg"></i>
+    <div>
+      <strong>{{ fuel_critical_count }} structure{{ fuel_critical_count|pluralize }}</strong>
+      with less than 48 hours of fuel remaining — refuel ASAP!
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Filter buttons ──────────────────────────────────────────────────── #}
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-filter="all">
+      {% trans "All" %}
+    </button>
+    <button class="btn btn-sm btn-outline-primary filter-btn" data-filter="athanor">
+      <i class="fas fa-tools me-1"></i>{% trans "Athanor" %}
+    </button>
+    <button class="btn btn-sm btn-outline-info filter-btn" data-filter="metenox">
+      <i class="fas fa-industry me-1"></i>{% trans "Metenox" %}
+    </button>
+    <button class="btn btn-sm btn-outline-danger filter-btn" data-filter="reinforce">
+      <i class="fas fa-exclamation-triangle me-1"></i>{% trans "Reinforce" %}
+    </button>
+    <button class="btn btn-sm btn-outline-warning filter-btn" data-filter="low-fuel">
+      <i class="fas fa-gas-pump me-1"></i>{% trans "Low Fuel" %}
+    </button>
+  </div>
+
+  {# ── Main table ──────────────────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0" id="structure-table">
+          <thead class="table-dark">
+            <tr>
+              <th>{% trans "Structure" %}</th>
+              <th>{% trans "Status" %}</th>
+              <th>{% trans "Moon" %}</th>
+              <th>{% trans "System" %}</th>
+              <th>{% trans "Corporation" %}</th>
+              <th>{% trans "Fuel" %}</th>
+              <th>{% trans "Services" %}</th>
+              <th>{% trans "Goo Bay" %}</th>
+              <th>{% trans "Reinforce Window" %}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in structures %}
+            {# Row highlight: red for reinforce, yellow for critical fuel #}
+            {% with is_rl=s.is_reinforced fuel_hrs=s.fuel_hours_remaining %}
+            <tr class="{% if is_rl %}table-danger{% elif fuel_hrs is not None and fuel_hrs < 48 %}table-warning{% endif %}"
+                data-type="{{ s.structure_type }}"
+                data-reinforce="{% if is_rl %}1{% else %}0{% endif %}"
+                data-low-fuel="{% if fuel_hrs is not None and fuel_hrs < 168 %}1{% else %}0{% endif %}">
+
+              {# Structure name + type badge #}
+              <td>
+                <div class="fw-bold text-nowrap">{{ s.name|default:s.structure_id }}</div>
+                {% if s.structure_type == "metenox" %}
+                  <span class="badge bg-info text-dark small">Metenox</span>
+                {% else %}
+                  <span class="badge bg-primary small">Athanor</span>
+                {% endif %}
+              </td>
+
+              {# State badge + reinforce timer #}
+              <td>
+                <span class="badge bg-{{ s.state_label.cls }}">{{ s.state_label.text }}</span>
+                {% if s.state_timer_end and is_rl %}
+                <div class="small text-danger fw-bold mt-1">
+                  <i class="fas fa-clock me-1"></i>{{ s.state_timer_end|date:"M d H:i" }} UTC
+                </div>
+                {% endif %}
+                {% if s.unanchors_at %}
+                <div class="small text-muted mt-1">
+                  {% trans "Unanchors" %}: {{ s.unanchors_at|date:"M d H:i" }} UTC
+                </div>
+                {% endif %}
+              </td>
+
+              {# Moon link #}
+              <td>
+                {% if s.moon %}
+                  <a href="{% url 'moonmaster:moon_detail' s.moon.pk %}">{{ s.moon.name }}</a>
+                {% else %}
+                  <span class="text-muted fst-italic small">{% trans "Unlinked" %}</span>
+                {% endif %}
+              </td>
+
+              {# System #}
+              <td class="text-nowrap">{{ s|structure_system }}</td>
+
+              {# Corporation #}
+              <td class="text-nowrap">
+                <img src="https://images.evetech.net/corporations/{{ s.owner.corporation.corporation_id }}/logo?size=32"
+                     width="20" height="20" class="rounded me-1" alt="">
+                {{ s.owner.corporation.corporation_name }}
+              </td>
+
+              {# Fuel remaining #}
+              <td class="text-nowrap">
+                {% if s.fuel_expires %}
+                  {% with urgency=s.fuel_expires|fuel_urgency_class countdown=s.fuel_expires|time_until_short %}
+                  <span class="badge bg-{{ urgency }} fs-6">{{ countdown }}</span>
+                  <div class="small text-muted mt-1">{{ s.fuel_expires|date:"M d H:i" }} UTC</div>
+                  {% endwith %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              {# Services #}
+              <td style="min-width:140px;">
+                {% for svc in s.services_parsed %}
+                  <span class="badge {% if svc.online %}bg-success{% else %}bg-secondary{% endif %} small me-1 mb-1"
+                        title="{{ svc.state }}">
+                    {{ svc.display }}
+                  </span>
+                {% empty %}
+                  <span class="text-muted small">{% trans "No services" %}</span>
+                {% endfor %}
+              </td>
+
+              {# Goo bay — Metenox only #}
+              <td style="min-width:90px;">
+                {% if s.structure_type == "metenox" and s.goo_bay_fill_pct is not None %}
+                  <div class="progress" style="height:18px;">
+                    <div class="progress-bar
+                      {% if s.goo_bay_fill_pct >= 80 %}bg-danger
+                      {% elif s.goo_bay_fill_pct >= 60 %}bg-warning
+                      {% else %}bg-success{% endif %}"
+                         style="width:{{ s.goo_bay_fill_pct }}%;" role="progressbar">
+                      {{ s.goo_bay_fill_pct|floatformat:0 }}%
+                    </div>
+                  </div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              {# Reinforce window schedule #}
+              <td class="text-nowrap small">
+                {% if s.reinforce_schedule %}
+                  <i class="fas fa-shield-alt me-1 text-muted"></i>{{ s.reinforce_schedule }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              {# Actions #}
+              <td>
+                {% if s.moon %}
+                <a href="{% url 'moonmaster:moon_detail' s.moon.pk %}"
+                   class="btn btn-sm btn-outline-primary" title="{% trans 'Moon Detail' %}">
+                  <i class="fas fa-chart-bar"></i>
+                </a>
+                {% endif %}
+              </td>
+
+            </tr>
+            {% endwith %}
+            {% empty %}
+            <tr>
+              <td colspan="10" class="text-muted text-center py-4">
+                {% trans "No structures tracked. Register a corporation owner to begin." %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-muted small mt-2">
+    <i class="fas fa-info-circle me-1"></i>
+    {% trans "Fuel, state, and services are updated each sync cycle. Re-authenticate the owner character if 'Unlinked' persists." %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block moonmaster_js %}
+<script>
+// Client-side filtering for the structure table
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    const filter = this.dataset.filter;
+    document.querySelectorAll('#structure-table tbody tr[data-type]').forEach(row => {
+      let show = true;
+      if (filter === 'athanor')   show = row.dataset.type === 'athanor';
+      if (filter === 'metenox')   show = row.dataset.type === 'metenox';
+      if (filter === 'reinforce') show = row.dataset.reinforce === '1';
+      if (filter === 'low-fuel')  show = row.dataset.lowFuel === '1';
+      row.style.display = show ? '' : 'none';
+    });
+  });
+});
+</script>
+{% endblock %}

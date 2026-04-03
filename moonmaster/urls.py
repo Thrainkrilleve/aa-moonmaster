@@ -10,6 +10,7 @@ urlpatterns = [
     path("moons/<int:moon_id>/", views.moon_detail, name="moon_detail"),
     path("extractions/", views.extractions, name="extractions"),
     path("metenox/", views.metenox_list, name="metenox_list"),
+    path("structures/", views.structure_list, name="structure_list"),
     path("reports/", views.reports, name="reports"),
     # Owner management
     path("owners/", views.manage_owners, name="manage_owners"),

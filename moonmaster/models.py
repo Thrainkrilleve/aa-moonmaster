@@ -129,6 +129,31 @@ class Structure(models.Model):
                     "Derived from ESI structure services."),
     )
 
+    # Reinforcement / structure state fields (synced from ESI)
+    state = models.CharField(
+        max_length=60, default="unknown", verbose_name=_("State"),
+        help_text=_("Raw ESI structure state string."),
+    )
+    state_timer_end = models.DateTimeField(
+        null=True, blank=True, verbose_name=_("State Timer End"),
+        help_text=_("When the current reinforce or vulnerability timer expires."),
+    )
+    reinforce_hour = models.IntegerField(
+        null=True, blank=True, verbose_name=_("Reinforce Hour (UTC)"),
+        help_text=_("Hour of day (0-23 UTC) when the vulnerability window starts."),
+    )
+    reinforce_weekday = models.IntegerField(
+        null=True, blank=True, verbose_name=_("Reinforce Weekday"),
+        help_text=_("0=Monday … 6=Sunday. Null if no specific day is set."),
+    )
+    services_raw = models.JSONField(
+        default=list, verbose_name=_("Services"),
+        help_text=_("Fitted service modules from ESI: [{name, state}, …]."),
+    )
+    unanchors_at = models.DateTimeField(
+        null=True, blank=True, verbose_name=_("Unanchors At"),
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -139,6 +164,73 @@ class Structure(models.Model):
     def __str__(self):
         moon_label = str(self.moon) if self.moon_id else "(no moon)"
         return self.name or f"Structure {self.structure_id} on {moon_label}"
+
+    # ------------------------------------------------------------------
+    # Computed properties (no DB queries)
+    # ------------------------------------------------------------------
+
+    @property
+    def is_reinforced(self) -> bool:
+        from .constants import REINFORCE_STATES
+        return self.state in REINFORCE_STATES
+
+    @property
+    def reinforce_type(self):
+        """Return 'armor', 'hull', or None."""
+        if self.state == "armor_reinforce":
+            return "armor"
+        if self.state == "hull_reinforce":
+            return "hull"
+        return None
+
+    @property
+    def state_label(self) -> dict:
+        """Return {'text': '...', 'cls': 'success|warning|danger|secondary'} for template."""
+        from .constants import STRUCTURE_STATE_LABELS
+        text, cls = STRUCTURE_STATE_LABELS.get(self.state, ("Unknown", "secondary"))
+        return {"text": text, "cls": cls}
+
+    @property
+    def services_parsed(self) -> list:
+        """Return list of dicts with display name + online flag for each fitted service."""
+        from .constants import SERVICE_DISPLAY_NAMES
+        result = []
+        for svc in (self.services_raw or []):
+            name = svc.get("name", "")
+            result.append({
+                "name": name,
+                "display": SERVICE_DISPLAY_NAMES.get(name, name.replace("_", " ").title()),
+                "state": svc.get("state", "offline"),
+                "online": svc.get("state") == "online",
+            })
+        return result
+
+    @property
+    def reinforce_schedule(self) -> str:
+        """Return human-readable reinforce window, e.g. 'Fri 14:00 UTC'."""
+        if self.reinforce_hour is None:
+            return ""
+        days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        day = f"{days[self.reinforce_weekday]} " if self.reinforce_weekday is not None else ""
+        return f"{day}{self.reinforce_hour:02d}:00 UTC"
+
+    @property
+    def fuel_days_remaining(self):
+        """Return whole days until fuel_expires, or None if not set."""
+        if not self.fuel_expires:
+            return None
+        from django.utils import timezone
+        delta = self.fuel_expires - timezone.now()
+        return max(0, int(delta.total_seconds() // 86400))
+
+    @property
+    def fuel_hours_remaining(self):
+        """Return whole hours until fuel_expires, or None if not set."""
+        if not self.fuel_expires:
+            return None
+        from django.utils import timezone
+        delta = self.fuel_expires - timezone.now()
+        return max(0, int(delta.total_seconds() // 3600))
 
 
 class Extraction(models.Model):

@@ -18,7 +18,7 @@
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:dashboard' %}">{% trans "Dashboard" %}</a></li>
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:moon_list' %}">{% trans "Moons" %}</a></li>
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:extractions' %}">{% trans "Extractions" %}</a></li>
-      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:metenox_list' %}">{% trans "Metenox" %}</a></li>
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:structure_list' %}">{% trans "Structures" %}</a></li>
       {% if perms.moonmaster.view_reports %}
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:reports' %}">{% trans "Reports" %}</a></li>
       {% endif %}
