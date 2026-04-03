@@ -107,6 +107,7 @@ def moon_detail(request, moon_id):
         moon=moon,
         tax_config=tax_config,
         fleet_share_pct=fleet_share_pct,
+        price_source="fuzzwork",
     )
     table = calculator.comparison_table()
 

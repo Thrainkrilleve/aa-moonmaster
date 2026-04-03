@@ -1,5 +1,5 @@
 {% extends "moonmaster/base.html" %}
-{% load i18n humanize %}
+{% load i18n moonmaster_tags %}
 
 {% block moonmaster_content %}
 <div class="container-fluid">
@@ -48,7 +48,15 @@
             <td class="text-end {% if row.metenox_net < 0 %}text-danger{% else %}text-success{% endif %}">
               {{ row.metenox_net|intcomma }} ISK
             </td>
-            <td>{{ moon.structures.count }}</td>
+            <td>
+              {% for s in moon.structures.all %}
+                <span class="badge {% if s.structure_type == 'metenox' %}bg-info text-dark{% else %}bg-secondary{% endif %} me-1">
+                  {{ s.get_structure_type_display }}
+                </span>
+              {% empty %}
+                <span class="text-muted">—</span>
+              {% endfor %}
+            </td>
             <td>
               <a href="{% url 'moonmaster:moon_detail' moon.pk %}" class="btn btn-sm btn-outline-primary">
                 <i class="fas fa-chart-bar"></i> {% trans "Details" %}

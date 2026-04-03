@@ -1,5 +1,5 @@
 {% extends "moonmaster/base.html" %}
-{% load i18n humanize %}
+{% load i18n moonmaster_tags %}
 
 {% block moonmaster_content %}
 <div class="container-fluid">
@@ -31,7 +31,7 @@
                 <span class="text-muted fst-italic">{% trans "Unlinked" %}</span>
               {% endif %}
             </td>
-            <td>{{ s.moon.solar_system_name|default:"—" }}</td>
+            <td>{{ s|structure_system }}</td>
             <td>{{ s.owner.corporation.corporation_name }}</td>
             <td>
               {% if s.is_online %}

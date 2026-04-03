@@ -740,25 +740,45 @@ def _try_link_structure_to_moon(structure, system_id, token):
                 )
                 return
 
-    # --- Attempt 2: Parse "System - PlanetRoman.MoonNum" from structure name ---
-    # Handles Metenox names like "NOL-M9 - VIII.7" → Moon "NOL-M9 VIII - Moon 7"
+    # --- Attempt 2: Parse structure name → Moon DB name ---
+    # Handles:
+    #   "NOL-M9 - VIII.7"  (Roman numeral planet)  → "NOL-M9 VIII - Moon 7"
+    #   "N-8YET - 7-12"    (decimal planet)         → "N-8YET VII - Moon 12"
+    #   "IP6V-X - V.1"     (Roman numeral planet)   → "IP6V-X V - Moon 1"
     if structure.name:
         import re
+
+        _INT_TO_ROMAN = {
+            1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII",
+            8: "VIII", 9: "IX", 10: "X", 11: "XI", 12: "XII", 13: "XIII",
+            14: "XIV", 15: "XV", 16: "XVI", 17: "XVII", 18: "XVIII",
+        }
+
+        def _to_roman(n):
+            return _INT_TO_ROMAN.get(int(n), str(n))
+
+        # Roman numeral planet: "System - VIII.7"
         m = re.match(r'^(.+?)\s*-\s*([IVXivx]+)\.(\d+)\s*$', structure.name)
         if m:
-            sys_name = m.group(1).strip()
-            planet_roman = m.group(2).upper()
-            moon_num = m.group(3)
-            candidate = f"{sys_name} {planet_roman} - Moon {moon_num}"
+            candidate = f"{m.group(1).strip()} {m.group(2).upper()} - Moon {m.group(3)}"
             moon_qs = Moon.objects.filter(name=candidate)
             if moon_qs.exists():
                 moon = moon_qs.first()
                 structure.moon = moon
                 structure.save(update_fields=["moon"])
-                logger.info(
-                    "Linked structure %s → %s via name parsing",
-                    structure.structure_id, moon,
-                )
+                logger.info("Linked structure %s → %s via name parsing (Roman)", structure.structure_id, moon)
+                return
+
+        # Decimal planet: "System - 7-12"
+        m = re.match(r'^(.+?)\s*-\s*(\d+)-(\d+)\s*$', structure.name)
+        if m:
+            candidate = f"{m.group(1).strip()} {_to_roman(m.group(2))} - Moon {m.group(3)}"
+            moon_qs = Moon.objects.filter(name=candidate)
+            if moon_qs.exists():
+                moon = moon_qs.first()
+                structure.moon = moon
+                structure.save(update_fields=["moon"])
+                logger.info("Linked structure %s → %s via name parsing (decimal)", structure.structure_id, moon)
                 return
 
     # --- Attempt 3: name-substring match against known Moon records ---
