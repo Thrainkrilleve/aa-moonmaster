@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("eveonline", "0017_evecharacter_corporation_id"),
+        ("eveonline", "0017_alliance_and_corp_names_are_not_unique"),
     ]
 
     operations = [
