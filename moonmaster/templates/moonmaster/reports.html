@@ -1,0 +1,60 @@
+{% extends "moonmaster/base.html" %}
+{% load i18n %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+  <h2><i class="fas fa-chart-bar me-2"></i>{% trans "Moon Profitability Reports" %}</h2>
+  <p class="text-muted mb-3">{% trans "All figures are estimated monthly net ISK, sorted by Metenox ROI." %}</p>
+
+  {% if rows %}
+  <div class="card">
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>{% trans "Moon" %}</th>
+            <th>{% trans "System" %}</th>
+            <th>{% trans "Rarity" %}</th>
+            <th class="text-end">{% trans "Drill Net/mo" %}</th>
+            <th class="text-end">{% trans "Metenox Net/mo" %}</th>
+            <th class="text-end">{% trans "Best Option" %}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% with d=row.table.drill m=row.table.metenox %}
+          <tr>
+            <td>{{ row.moon.name }}</td>
+            <td>{{ row.moon.solar_system_name }}</td>
+            <td><span class="badge mm-rarity-{{ row.moon.rarity_class }}">{{ row.moon.get_rarity_class_display }}</span></td>
+            <td class="text-end {% if d.net_isk_per_month > 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ d.net_isk_per_month|floatformat:0 }} ISK
+            </td>
+            <td class="text-end {% if m.net_isk_per_month > 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ m.net_isk_per_month|floatformat:0 }} ISK
+            </td>
+            <td class="text-end fw-bold">
+              {% if m.net_isk_per_month > d.net_isk_per_month %}
+                <span class="badge bg-info text-dark">{% trans "Metenox" %}</span>
+              {% else %}
+                <span class="badge bg-primary">{% trans "Drill" %}</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'moonmaster:moon_detail' row.moon.pk %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-info-circle"></i>
+              </a>
+            </td>
+          </tr>
+          {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+    <div class="alert alert-info">{% trans "No moons in the database yet." %}</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "moonmaster/base.html" %}
+{% load i18n %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h2><i class="fas fa-users-cog me-2"></i>{% trans "Manage Corp Owners" %}</h2>
+    <a href="{% url 'moonmaster:add_owner' %}" class="btn btn-success">
+      <i class="fas fa-plus me-1"></i>{% trans "Register Your Corporation" %}
+    </a>
+  </div>
+
+  {% if owners %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover table-striped mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>{% trans "Corporation" %}</th>
+              <th>{% trans "ESI Character" %}</th>
+              <th>{% trans "Active" %}</th>
+              <th>{% trans "Last Sync" %}</th>
+              <th>{% trans "Sync Error" %}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for owner in owners %}
+            <tr>
+              <td>
+                <img src="https://images.evetech.net/corporations/{{ owner.corporation.corporation_id }}/logo?size=32"
+                     class="rounded me-1" alt="" width="32" height="32">
+                {{ owner.corporation.corporation_name }}
+              </td>
+              <td>
+                {% if owner.character %}
+                  <img src="https://images.evetech.net/characters/{{ owner.character.character_id }}/portrait?size=32"
+                       class="rounded-circle me-1" alt="" width="32" height="32">
+                  {{ owner.character.character_name }}
+                {% else %}
+                  <span class="text-muted">{% trans "None" %}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if owner.is_active %}
+                  <span class="badge text-bg-success">{% trans "Yes" %}</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">{% trans "No" %}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if owner.last_sync %}
+                  {{ owner.last_sync|date:"Y-m-d H:i" }} UTC
+                {% else %}
+                  <span class="text-muted">{% trans "Never" %}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if owner.sync_error %}
+                  <span class="text-danger small" title="{{ owner.sync_error }}">
+                    <i class="fas fa-exclamation-triangle me-1"></i>{{ owner.sync_error|truncatechars:60 }}
+                  </span>
+                {% else %}
+                  <span class="text-success"><i class="fas fa-check"></i></span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <form method="post" action="{% url 'moonmaster:remove_owner' owner.pk %}"
+                      onsubmit="return confirm('{% trans "Remove this corporation from Moon Master?" %}')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="fas fa-trash-alt"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <div class="alert alert-info">
+      <i class="fas fa-info-circle me-2"></i>
+      {% trans "No corporations registered yet. Click \"Register Your Corporation\" to add one." %}
+    </div>
+  {% endif %}
+</div>
+{% endblock moonmaster_content %}

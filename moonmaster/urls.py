@@ -1,0 +1,21 @@
+from django.urls import path
+
+from . import views
+
+app_name = "moonmaster"
+
+urlpatterns = [
+    path("", views.dashboard, name="dashboard"),
+    path("moons/", views.moon_list, name="moon_list"),
+    path("moons/<int:moon_id>/", views.moon_detail, name="moon_detail"),
+    path("extractions/", views.extractions, name="extractions"),
+    path("metenox/", views.metenox_list, name="metenox_list"),
+    path("reports/", views.reports, name="reports"),
+    # Owner management
+    path("owners/", views.manage_owners, name="manage_owners"),
+    path("owners/add/", views.add_owner, name="add_owner"),
+    path("owners/<int:owner_id>/remove/", views.remove_owner, name="remove_owner"),
+    # AJAX / API endpoints
+    path("api/moon/<int:moon_id>/profitability/", views.moon_profitability_api, name="moon_profitability_api"),
+    path("api/prices/refresh/", views.refresh_prices_api, name="refresh_prices_api"),
+]

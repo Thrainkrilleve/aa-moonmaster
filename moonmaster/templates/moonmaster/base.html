@@ -1,0 +1,37 @@
+{% extends "allianceauth/base-bs5.html" %}
+{% load i18n %}
+
+{% block page_title %}{% trans "Moon Master" %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ STATIC_URL }}moonmaster/css/moonmaster.css">
+{% endblock %}
+
+{% block content %}
+<nav class="navbar navbar-expand-sm navbar-dark bg-dark mb-3 px-3">
+  <span class="navbar-brand"><i class="fas fa-moon me-1"></i>{% trans "Moon Master" %}</span>
+  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mmNav">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="mmNav">
+    <ul class="navbar-nav me-auto">
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:dashboard' %}">{% trans "Dashboard" %}</a></li>
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:moon_list' %}">{% trans "Moons" %}</a></li>
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:extractions' %}">{% trans "Extractions" %}</a></li>
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:metenox_list' %}">{% trans "Metenox" %}</a></li>
+      {% if perms.moonmaster.view_reports %}
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:reports' %}">{% trans "Reports" %}</a></li>
+      {% endif %}
+      {% if perms.moonmaster.manage_moons %}
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:manage_owners' %}">{% trans "Manage Owners" %}</a></li>
+      {% endif %}
+    </ul>
+  </div>
+</nav>
+{% block moonmaster_content %}{% endblock %}
+{% endblock %}
+
+{% block extra_javascript %}
+<script src="{{ STATIC_URL }}moonmaster/js/moonmaster.js"></script>
+{% block moonmaster_js %}{% endblock %}
+{% endblock %}
