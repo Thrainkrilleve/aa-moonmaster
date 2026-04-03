@@ -1,5 +1,5 @@
 {% extends "moonmaster/base.html" %}
-{% load i18n %}
+{% load i18n humanize %}
 
 {% block moonmaster_content %}
 <div class="container-fluid">
@@ -20,12 +20,15 @@
             <th>{% trans "System" %}</th>
             <th>{% trans "Region" %}</th>
             <th>{% trans "Rarity" %}</th>
+            <th class="text-end">{% trans "Athanor Net/mo" %}</th>
+            <th class="text-end">{% trans "Metenox Net/mo" %}</th>
             <th>{% trans "Structures" %}</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {% for moon in moons %}
+          {% for row in moon_rows %}
+          {% with moon=row.moon %}
           <tr>
             <td>{{ moon.name }}</td>
             <td>{{ moon.solar_system_name }}</td>
@@ -39,6 +42,12 @@
               <span class="text-muted">—</span>
               {% endif %}
             </td>
+            <td class="text-end {% if row.drill_net < 0 %}text-danger{% else %}text-success{% endif %}">
+              {{ row.drill_net|intcomma }} ISK
+            </td>
+            <td class="text-end {% if row.metenox_net < 0 %}text-danger{% else %}text-success{% endif %}">
+              {{ row.metenox_net|intcomma }} ISK
+            </td>
             <td>{{ moon.structures.count }}</td>
             <td>
               <a href="{% url 'moonmaster:moon_detail' moon.pk %}" class="btn btn-sm btn-outline-primary">
@@ -46,8 +55,9 @@
               </a>
             </td>
           </tr>
+          {% endwith %}
           {% empty %}
-          <tr><td colspan="6" class="text-muted text-center py-4">{% trans "No moons tracked yet. Add moons via the admin panel." %}</td></tr>
+          <tr><td colspan="8" class="text-muted text-center py-4">{% trans "No moons tracked yet. Add moons via the admin panel." %}</td></tr>
           {% endfor %}
         </tbody>
       </table>

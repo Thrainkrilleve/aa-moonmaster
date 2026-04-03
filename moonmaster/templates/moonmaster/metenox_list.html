@@ -1,5 +1,5 @@
 {% extends "moonmaster/base.html" %}
-{% load i18n %}
+{% load i18n humanize %}
 
 {% block moonmaster_content %}
 <div class="container-fluid">
@@ -17,6 +17,7 @@
             <th>{% trans "Online" %}</th>
             <th>{% trans "Fuel Expires" %}</th>
             <th>{% trans "Goo Bay" %}</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -61,9 +62,16 @@
                 </div>
               {% else %}<span class="text-muted">—</span>{% endif %}
             </td>
+            <td>
+              {% if s.moon %}
+                <a href="{% url 'moonmaster:moon_detail' s.moon.pk %}" class="btn btn-sm btn-outline-primary">
+                  <i class="fas fa-chart-bar"></i> {% trans "Detail" %}
+                </a>
+              {% endif %}
+            </td>
           </tr>
           {% empty %}
-          <tr><td colspan="7" class="text-muted text-center py-4">{% trans "No Metenox structures tracked." %}</td></tr>
+          <tr><td colspan="8" class="text-muted text-center py-4">{% trans "No Metenox structures tracked." %}</td></tr>
           {% endfor %}
         </tbody>
       </table>

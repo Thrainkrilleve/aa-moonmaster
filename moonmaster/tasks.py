@@ -31,7 +31,7 @@ def update_prices(self):
     try:
         from .models import Moon, OrePrice
         from .constants import (
-            PRICE_SOURCE_ESI,
+            PRICE_SOURCE_FUZZWORK,
             ESI_TYPE_ID_NITROGEN_FUEL_BLOCK,
             ESI_TYPE_ID_HYDROGEN_FUEL_BLOCK,
             ESI_TYPE_ID_HELIUM_FUEL_BLOCK,
@@ -54,7 +54,7 @@ def update_prices(self):
             ESI_TYPE_ID_MAGMATIC_GAS,
         ])
 
-        updated = update_all_prices(list(type_id_set), source=PRICE_SOURCE_ESI)
+        updated = update_all_prices(list(type_id_set), source=PRICE_SOURCE_FUZZWORK)
         logger.info("moonmaster.update_prices: updated %d price records.", updated)
     except Exception as exc:
         logger.exception("moonmaster.update_prices failed: %s", exc)
@@ -740,7 +740,28 @@ def _try_link_structure_to_moon(structure, system_id, token):
                 )
                 return
 
-    # --- Attempt 2: name-substring match against known Moon records ---
+    # --- Attempt 2: Parse "System - PlanetRoman.MoonNum" from structure name ---
+    # Handles Metenox names like "NOL-M9 - VIII.7" → Moon "NOL-M9 VIII - Moon 7"
+    if structure.name:
+        import re
+        m = re.match(r'^(.+?)\s*-\s*([IVXivx]+)\.(\d+)\s*$', structure.name)
+        if m:
+            sys_name = m.group(1).strip()
+            planet_roman = m.group(2).upper()
+            moon_num = m.group(3)
+            candidate = f"{sys_name} {planet_roman} - Moon {moon_num}"
+            moon_qs = Moon.objects.filter(name=candidate)
+            if moon_qs.exists():
+                moon = moon_qs.first()
+                structure.moon = moon
+                structure.save(update_fields=["moon"])
+                logger.info(
+                    "Linked structure %s → %s via name parsing",
+                    structure.structure_id, moon,
+                )
+                return
+
+    # --- Attempt 3: name-substring match against known Moon records ---
     if structure.name:
         for moon in Moon.objects.all():
             if moon.name and moon.name in structure.name:

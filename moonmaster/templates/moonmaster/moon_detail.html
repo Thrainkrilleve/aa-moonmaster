@@ -1,5 +1,5 @@
 {% extends "moonmaster/base.html" %}
-{% load i18n %}
+{% load i18n humanize %}
 
 {% block moonmaster_content %}
 <div class="container-fluid">
@@ -128,14 +128,14 @@
             <div class="card-body">
               {% if table.drill %}
               <table class="table table-sm">
-                <tr><th>{% trans "Gross Value/mo" %}</th><td class="text-end">{{ table.drill.gross_isk_per_month|floatformat:0 }} ISK</td></tr>
-                <tr class="text-danger"><th>{% trans "Alliance Tax" %}</th><td class="text-end">&minus; {{ table.drill.alliance_tax_isk|floatformat:0 }}</td></tr>
-                <tr class="text-danger"><th>{% trans "Corp Tax" %}</th><td class="text-end">&minus; {{ table.drill.corp_tax_isk|floatformat:0 }}</td></tr>
-                <tr class="text-danger"><th>{% trans "Reprocess Tax" %}</th><td class="text-end">&minus; {{ table.drill.reprocess_tax_isk|floatformat:0 }}</td></tr>
-                <tr class="text-danger"><th>{% trans "Sov / Upkeep" %}</th><td class="text-end">&minus; {{ table.drill.sov_upkeep_isk|floatformat:0 }}</td></tr>
-                <tr class="fw-bold border-top"><th>{% trans "Net / Month" %}</th><td class="text-end text-success">{{ table.drill.net_isk_per_month|floatformat:0 }} ISK</td></tr>
+                <tr><th>{% trans "Gross Value/mo" %}</th><td class="text-end">{{ table.drill.gross_isk_per_month|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Alliance Tax" %}</th><td class="text-end">&minus; {{ table.drill.alliance_tax_isk|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Corp Tax" %}</th><td class="text-end">&minus; {{ table.drill.corp_tax_isk|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Reprocess Tax" %}</th><td class="text-end">&minus; {{ table.drill.reprocess_tax_isk|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Sov / Upkeep" %}</th><td class="text-end">&minus; {{ table.drill.sov_upkeep_isk|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="fw-bold border-top"><th>{% trans "Net / Month" %}</th><td class="text-end text-success">{{ table.drill.net_isk_per_month|floatformat:0|intcomma }} ISK</td></tr>
                 {% if table.drill.corp_fleet_share_isk %}
-                <tr class="text-info"><th>{% trans "Corp Fleet Share" %}</th><td class="text-end">{{ table.drill.corp_fleet_share_isk|floatformat:0 }}</td></tr>
+                <tr class="text-info"><th>{% trans "Corp Fleet Share" %}</th><td class="text-end">{{ table.drill.corp_fleet_share_isk|floatformat:0|intcomma }} ISK</td></tr>
                 {% endif %}
               </table>
               {% else %}
@@ -154,14 +154,14 @@
             <div class="card-body">
               {% if table.metenox %}
               <table class="table table-sm">
-                <tr><th>{% trans "Gross Value/mo" %}</th><td class="text-end">{{ table.metenox.gross_isk_per_month|floatformat:0 }} ISK</td></tr>
-                <tr class="text-danger"><th>{% trans "Fuel Blocks" %}</th><td class="text-end">&minus; {{ table.metenox.fuel_cost_per_month|floatformat:0 }}</td></tr>
-                <tr class="text-danger"><th>{% trans "Magmatic Gas" %}</th><td class="text-end">&minus; {{ table.metenox.gas_cost_per_month|floatformat:0 }}</td></tr>
-                <tr class="text-danger"><th>{% trans "Alliance Tax" %}</th><td class="text-end">&minus; {{ table.metenox.alliance_tax_isk|floatformat:0 }}</td></tr>
-                <tr class="text-danger"><th>{% trans "Corp Tax" %}</th><td class="text-end">&minus; {{ table.metenox.corp_tax_isk|floatformat:0 }}</td></tr>
-                <tr class="text-danger"><th>{% trans "Reprocess Tax" %}</th><td class="text-end">&minus; {{ table.metenox.reprocess_tax_isk|floatformat:0 }}</td></tr>
-                <tr class="text-danger"><th>{% trans "Sov / Upkeep" %}</th><td class="text-end">&minus; {{ table.metenox.sov_upkeep_isk|floatformat:0 }}</td></tr>
-                <tr class="fw-bold border-top"><th>{% trans "Net / Month" %}</th><td class="text-end text-success">{{ table.metenox.net_isk_per_month|floatformat:0 }} ISK</td></tr>
+                <tr><th>{% trans "Gross Value/mo" %}</th><td class="text-end">{{ table.metenox.gross_isk_per_month|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Fuel Blocks" %}</th><td class="text-end">&minus; {{ table.metenox.fuel_cost_per_month|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Magmatic Gas" %}</th><td class="text-end">&minus; {{ table.metenox.gas_cost_per_month|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Alliance Tax" %}</th><td class="text-end">&minus; {{ table.metenox.alliance_tax_isk|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Corp Tax" %}</th><td class="text-end">&minus; {{ table.metenox.corp_tax_isk|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Reprocess Tax" %}</th><td class="text-end">&minus; {{ table.metenox.reprocess_tax_isk|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Sov / Upkeep" %}</th><td class="text-end">&minus; {{ table.metenox.sov_upkeep_isk|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="fw-bold border-top"><th>{% trans "Net / Month" %}</th><td class="text-end text-success">{{ table.metenox.net_isk_per_month|floatformat:0|intcomma }} ISK</td></tr>
               </table>
               {% else %}
               <p class="text-muted">{% trans "Not applicable." %}</p>

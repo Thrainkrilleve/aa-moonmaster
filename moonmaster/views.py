@@ -80,8 +80,19 @@ def dashboard(request):
 @login_required
 @permission_required("moonmaster.basic_access", raise_exception=True)
 def moon_list(request):
-    moons = Moon.objects.all().order_by("solar_system_name", "name")
-    context = {"moons": moons}
+    moons = Moon.objects.prefetch_related("structures").order_by("solar_system_name", "name")
+    tax_config = _get_tax_config(request.user)
+    moon_rows = []
+    for moon in moons:
+        calc = MoonProfitCalculator(moon=moon, tax_config=tax_config)
+        tbl = calc.comparison_table()
+        moon_rows.append({
+            "moon": moon,
+            "drill_net": int(tbl.drill.net_isk_per_month) if tbl.drill else 0,
+            "metenox_net": int(tbl.metenox.net_isk_per_month) if tbl.metenox else 0,
+        })
+    moon_rows.sort(key=lambda r: r["metenox_net"], reverse=True)
+    context = {"moon_rows": moon_rows}
     return render(request, "moonmaster/moon_list.html", context)
 
 
@@ -288,11 +299,11 @@ def update_tax_config(request, owner_id):
     owner = get_object_or_404(StructureOwner, pk=owner_id)
     tax, _ = TaxConfig.objects.get_or_create(owner=owner)
     try:
-        tax.alliance_tax = float(request.POST.get("alliance_tax", 0))
-        tax.corp_tax = float(request.POST.get("corp_tax", 0))
-        tax.reprocess_tax = float(request.POST.get("reprocess_tax", 0))
+        tax.alliance_tax = float(request.POST.get("alliance_tax") or 0)
+        tax.corp_tax = float(request.POST.get("corp_tax") or 0)
+        tax.reprocess_tax = float(request.POST.get("reprocess_tax") or 0)
         tax.sov_upkeep_daily_isk = decimal.Decimal(
-            request.POST.get("sov_upkeep_daily_isk", "0") or "0"
+            str(request.POST.get("sov_upkeep_daily_isk") or "0")
         )
         tax.full_clean()
         tax.save()
