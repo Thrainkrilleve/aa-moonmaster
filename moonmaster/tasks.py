@@ -177,7 +177,7 @@ def _sync_owner_structures(owner):
                 "unanchors_at": unanchors_at,
             },
         )
-        if obj.moon_id is None:
+        if obj.moon_id is None and structure_type in ("metenox", "athanor"):
             _try_link_structure_to_moon(obj, system_id, token)
         updated += 1
 
@@ -735,6 +735,7 @@ def _try_link_structure_to_moon(structure, system_id, token):
         refresh_token,
         get_structure_info,
         find_moon_for_position,
+        find_moon_by_number,
         get_or_create_moon,
     )
     from .models import Moon
@@ -790,6 +791,22 @@ def _try_link_structure_to_moon(structure, system_id, token):
                 structure.save(update_fields=["moon"])
                 logger.info("Linked structure %s → %s via name parsing (Roman)", structure.structure_id, moon)
                 return
+            # Moon record doesn't exist yet — resolve via ESI by planet/moon number
+            _ROMAN_TO_INT = {
+                "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7,
+                "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12, "XIII": 13,
+                "XIV": 14, "XV": 15, "XVI": 16, "XVII": 17, "XVIII": 18,
+            }
+            planet_n = _ROMAN_TO_INT.get(m.group(2).upper())
+            moon_n = int(m.group(3))
+            if planet_n and system_id:
+                moon_id = find_moon_by_number(system_id, planet_n, moon_n)
+                if moon_id:
+                    moon, _ = get_or_create_moon(moon_id)
+                    structure.moon = moon
+                    structure.save(update_fields=["moon"])
+                    logger.info("Linked structure %s → %s via ESI planet/moon lookup (Roman)", structure.structure_id, moon)
+                    return
 
         # Decimal planet: "System - 7-12"
         m = re.match(r'^(.+?)\s*-\s*(\d+)-(\d+)\s*$', structure.name)
@@ -802,6 +819,17 @@ def _try_link_structure_to_moon(structure, system_id, token):
                 structure.save(update_fields=["moon"])
                 logger.info("Linked structure %s → %s via name parsing (decimal)", structure.structure_id, moon)
                 return
+            # Moon record doesn't exist yet — resolve via ESI by planet/moon number
+            planet_n = int(m.group(2))
+            moon_n = int(m.group(3))
+            if system_id:
+                moon_id = find_moon_by_number(system_id, planet_n, moon_n)
+                if moon_id:
+                    moon, _ = get_or_create_moon(moon_id)
+                    structure.moon = moon
+                    structure.save(update_fields=["moon"])
+                    logger.info("Linked structure %s → %s via ESI planet/moon lookup (decimal)", structure.structure_id, moon)
+                    return
 
     # --- Attempt 3: name-substring match against known Moon records ---
     if structure.name:

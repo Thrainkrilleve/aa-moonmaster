@@ -288,3 +288,63 @@ def find_moon_for_position(
             continue
 
     return best_id
+
+
+def resolve_moon_name_to_id(moon_name: str) -> Optional[int]:
+    """
+    Use the public ESI /universe/ids/ endpoint to resolve a moon name string
+    (e.g. "NOL-M9 VIII - Moon 7") to its EVE moon_id.
+    Returns None if the name cannot be resolved.
+    """
+    try:
+        resp = requests.post(
+            f"{ESI_BASE}/universe/ids/",
+            params={"datasource": ESI_DATASOURCE},
+            headers={"Accept": "application/json", "User-Agent": _USER_AGENT},
+            json=[moon_name],
+            timeout=ESI_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        moons = data.get("moons", [])
+        if moons:
+            return int(moons[0]["id"])
+    except Exception as exc:
+        logger.warning("resolve_moon_name_to_id(%r): %s", moon_name, exc)
+    return None
+
+
+def find_moon_by_number(system_id: int, planet_num: int, moon_num: int) -> Optional[int]:
+    """
+    Return the moon_id for the planet_num-th planet's moon_num-th moon in
+    the given solar system using only public ESI.
+
+    Planets within a system are returned by ESI in order of their planet IDs,
+    which are assigned sequentially from the innermost planet outward —
+    so sorting by planet_id gives the in-game numbered order.
+    Within each planet the moons list is also ordered by moon number.
+    """
+    try:
+        sys_data = esi_public_get(f"/universe/systems/{system_id}/")
+    except Exception as exc:
+        logger.warning("find_moon_by_number: system %d lookup failed: %s", system_id, exc)
+        return None
+
+    planets = sorted(sys_data.get("planets", []), key=lambda p: p["planet_id"])
+    if planet_num < 1 or planet_num > len(planets):
+        logger.debug(
+            "find_moon_by_number: system %d has %d planets, requested planet %d",
+            system_id, len(planets), planet_num,
+        )
+        return None
+
+    planet = planets[planet_num - 1]
+    moons = planet.get("moons", [])
+    if moon_num < 1 or moon_num > len(moons):
+        logger.debug(
+            "find_moon_by_number: planet %d has %d moons, requested moon %d",
+            planet["planet_id"], len(moons), moon_num,
+        )
+        return None
+
+    return int(moons[moon_num - 1])
