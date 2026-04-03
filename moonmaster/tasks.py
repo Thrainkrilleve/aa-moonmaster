@@ -366,6 +366,102 @@ def _send_discord_alert(owner, message: str):
 
 
 # ---------------------------------------------------------------------------
+# Moon survey import (async — avoids HTTP gateway timeouts)
+# ---------------------------------------------------------------------------
+
+@shared_task(bind=True, name="moonmaster.tasks.process_survey")
+def process_survey(self, raw: str, user_id: int):
+    """
+    Parse and import a raw moon drill scan export in the background.
+    Sends the requesting user an AA notification on completion.
+    """
+    try:
+        from .providers import get_or_create_moon
+        from .constants import MOON_ORE_RARITY, RARITY_UBIQUITOUS
+
+        created = updated = 0
+        errors: list = []
+        moon_rows: dict = {}
+
+        for lineno, line in enumerate(raw.splitlines(), 1):
+            line = line.rstrip("\r")
+            if not line.strip():
+                continue
+            cols = line.split("\t")
+            # Skip header and moon-name rows (non-empty first column)
+            if cols[0].strip():
+                continue
+            if len(cols) < 7:
+                errors.append(f"Line {lineno}: expected 7 columns, got {len(cols)}")
+                continue
+            try:
+                moon_id = int(cols[6])    # MoonID
+                type_id = int(cols[3])    # Ore TypeID
+                quantity = float(cols[2]) # Quantity / fraction
+            except (ValueError, IndexError) as exc:
+                errors.append(f"Line {lineno}: {exc}")
+                continue
+            if moon_id not in moon_rows:
+                moon_rows[moon_id] = {"composition": {}}
+            moon_rows[moon_id]["composition"][str(type_id)] = quantity
+
+        _rank = {"ubiquitous": 0, "common": 1, "uncommon": 2, "rare": 3, "exceptional": 4}
+
+        def _infer_rarity(composition):
+            best = RARITY_UBIQUITOUS
+            for tid_str in composition:
+                rarity = MOON_ORE_RARITY.get(int(tid_str))
+                if rarity and _rank.get(rarity, 0) > _rank.get(best, 0):
+                    best = rarity
+            return best
+
+        for moon_id, data in moon_rows.items():
+            moon, was_created = get_or_create_moon(moon_id)
+            total = sum(data["composition"].values())
+            normed = (
+                {k: v / total for k, v in data["composition"].items()}
+                if total > 0 else data["composition"]
+            )
+            moon.ore_composition = normed
+            moon.rarity_class = _infer_rarity(normed)
+            moon.save(update_fields=["ore_composition", "rarity_class"])
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+
+        # Notify the requesting user via AA's notification system
+        try:
+            from django.contrib.auth.models import User
+            from allianceauth.notifications import notify
+
+            user = User.objects.get(pk=user_id)
+            error_summary = (
+                f" ({len(errors)} line(s) skipped)" if errors else ""
+            )
+            notify(
+                user=user,
+                title="Moon Survey Import Complete",
+                message=(
+                    f"Import finished: {created} moon(s) created, "
+                    f"{updated} updated{error_summary}."
+                ),
+                level="success" if not errors else "warning",
+            )
+        except Exception:
+            pass  # notification failure shouldn't fail the task
+
+        logger.info(
+            "process_survey: created=%d updated=%d errors=%d",
+            created, updated, len(errors),
+        )
+
+    except Exception as exc:
+        logger.exception("moonmaster.process_survey failed: %s", exc)
+        raise self.retry(exc=exc, countdown=60, max_retries=2)
+
+
+# ---------------------------------------------------------------------------
 # Per-owner on-demand sync
 # ---------------------------------------------------------------------------
 

@@ -287,97 +287,18 @@ def import_survey(request):
     """
     Import moon probe-scanner export data (tab-separated from the in-game
     Structure → Moon Survey → Export button).
+    Processing is dispatched to a Celery task to avoid gateway timeouts.
     """
     if request.method == "POST":
         raw = request.POST.get("scan_data", "").strip()
         if not raw:
             messages.warning(request, "No scan data provided.")
             return redirect("moonmaster:import_survey")
-        result = _parse_and_import_survey(raw)
-        if result["created"] or result["updated"]:
-            messages.success(
-                request,
-                f"Import complete — {result['created']} moon(s) created, "
-                f"{result['updated']} updated.",
-            )
-        if result["errors"]:
-            messages.warning(
-                request,
-                f"{len(result['errors'])} line(s) skipped: "
-                + "; ".join(result["errors"][:5]),
-            )
+        from .tasks import process_survey
+        process_survey.delay(raw, request.user.pk)
+        messages.success(
+            request,
+            "Survey submitted for processing — you'll receive a notification when it's done.",
+        )
         return redirect("moonmaster:moon_list")
     return render(request, "moonmaster/import_survey.html", {})
-
-
-def _parse_and_import_survey(raw: str) -> dict:
-    """
-    Parse an in-game moon probe scanner export and upsert Moon records.
-
-    The EVE export is tab-separated with a 7-column header row followed by
-    moon name rows and ore rows.  Per ore row the columns are:
-
-      [0] ""  [1] OreName  [2] Quantity  [3] OreTypeID  [4] SolarSystemID  [5] PlanetID  [6] MoonID
-
-    Moon name rows have the moon name in [0] and the rest empty/absent.
-
-    Returns {'created': int, 'updated': int, 'errors': list[str]}.
-    """
-    from .providers import get_or_create_moon
-
-    created = updated = 0
-    errors: list = []
-    moon_rows: dict = {}
-
-    for lineno, line in enumerate(raw.splitlines(), 1):
-        line = line.rstrip("\r")
-        if not line.strip():
-            continue
-        cols = line.split("\t")
-        # Skip the header row and moon-name rows (non-empty first column)
-        if cols[0].strip():
-            continue
-        # Ore rows: need at least 7 columns
-        if len(cols) < 7:
-            errors.append(f"Line {lineno}: expected 7 columns, got {len(cols)}")
-            continue
-        try:
-            moon_id = int(cols[6])   # MoonID
-            type_id = int(cols[3])   # Ore TypeID
-            quantity = float(cols[2])  # Quantity / fraction
-        except (ValueError, IndexError) as exc:
-            errors.append(f"Line {lineno}: {exc}")
-            continue
-        if moon_id not in moon_rows:
-            moon_rows[moon_id] = {"composition": {}}
-        moon_rows[moon_id]["composition"][str(type_id)] = quantity
-
-    for moon_id, data in moon_rows.items():
-        moon, was_created = get_or_create_moon(moon_id)
-        total = sum(data["composition"].values())
-        normed = (
-            {k: v / total for k, v in data["composition"].items()}
-            if total > 0
-            else data["composition"]
-        )
-        moon.ore_composition = normed
-        moon.rarity_class = _infer_rarity(normed)
-        moon.save(update_fields=["ore_composition", "rarity_class"])
-        if was_created:
-            created += 1
-        else:
-            updated += 1
-
-    return {"created": created, "updated": updated, "errors": errors}
-
-
-def _infer_rarity(composition: dict) -> str:
-    """Return the highest rarity class present in the ore composition."""
-    from .constants import MOON_ORE_RARITY, RARITY_UBIQUITOUS
-    _rank = {"ubiquitous": 0, "common": 1, "uncommon": 2, "rare": 3, "exceptional": 4}
-    best = RARITY_UBIQUITOUS
-    for type_id_str in composition:
-        rarity = MOON_ORE_RARITY.get(int(type_id_str))
-        if rarity and _rank.get(rarity, 0) > _rank.get(best, 0):
-            best = rarity
-    return best
