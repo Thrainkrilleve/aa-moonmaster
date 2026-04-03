@@ -76,7 +76,13 @@
             <tbody>
               {% for ext in upcoming_extractions %}
               <tr>
-                <td><a href="{% url 'moonmaster:moon_detail' ext.structure.moon.pk %}">{{ ext.structure.moon.name }}</a></td>
+                <td>
+                  {% if ext.structure.moon %}
+                    <a href="{% url 'moonmaster:moon_detail' ext.structure.moon.pk %}">{{ ext.structure.moon.name }}</a>
+                  {% else %}
+                    <span class="text-muted fst-italic">{% trans "Unlinked" %}</span>
+                  {% endif %}
+                </td>
                 <td>{{ ext.structure.name|default:ext.structure.structure_id }}</td>
                 <td>{{ ext.chunk_arrival_time|date:"Y-m-d H:i" }} UTC</td>
                 <td><span class="badge bg-{% if ext.status == 'ready' %}success{% elif ext.status == 'fired' %}secondary{% else %}warning text-dark{% endif %}">{{ ext.get_status_display }}</span></td>

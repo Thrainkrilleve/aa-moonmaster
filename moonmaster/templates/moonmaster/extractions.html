@@ -22,7 +22,13 @@
         <tbody>
           {% for ext in extractions %}
           <tr>
-            <td><a href="{% url 'moonmaster:moon_detail' ext.structure.moon.pk %}">{{ ext.structure.moon.name }}</a></td>
+            <td>
+              {% if ext.structure.moon %}
+                <a href="{% url 'moonmaster:moon_detail' ext.structure.moon.pk %}">{{ ext.structure.moon.name }}</a>
+              {% else %}
+                <span class="text-muted fst-italic">{% trans "Unlinked" %}</span>
+              {% endif %}
+            </td>
             <td>{{ ext.structure.name|default:ext.structure.structure_id }}</td>
             <td>{{ ext.structure.owner.corporation.corporation_name }}</td>
             <td>{{ ext.chunk_arrival_time|date:"Y-m-d H:i" }}</td>

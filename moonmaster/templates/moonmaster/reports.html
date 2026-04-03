@@ -42,9 +42,11 @@
               {% endif %}
             </td>
             <td>
+              {% if row.moon %}
               <a href="{% url 'moonmaster:moon_detail' row.moon.pk %}" class="btn btn-sm btn-outline-secondary">
                 <i class="fas fa-info-circle"></i>
               </a>
+              {% endif %}
             </td>
           </tr>
           {% endwith %}

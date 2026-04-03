@@ -23,8 +23,14 @@
           {% for s in structures %}
           <tr>
             <td>{{ s.name|default:s.structure_id }}</td>
-            <td><a href="{% url 'moonmaster:moon_detail' s.moon.pk %}">{{ s.moon.name }}</a></td>
-            <td>{{ s.moon.solar_system_name }}</td>
+            <td>
+              {% if s.moon %}
+                <a href="{% url 'moonmaster:moon_detail' s.moon.pk %}">{{ s.moon.name }}</a>
+              {% else %}
+                <span class="text-muted fst-italic">{% trans "Unlinked" %}</span>
+              {% endif %}
+            </td>
+            <td>{{ s.moon.solar_system_name|default:"—" }}</td>
             <td>{{ s.owner.corporation.corporation_name }}</td>
             <td>
               {% if s.is_online %}
