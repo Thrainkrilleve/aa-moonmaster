@@ -1,0 +1,64 @@
+{% extends "moonmaster/base.html" %}
+{% load i18n %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+  <h2><i class="fas fa-globe me-2"></i>{% trans "Moon Database" %}</h2>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <input id="moonSearch" type="text" class="form-control" placeholder="{% trans 'Search moons, systems, regions…' %}">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0" id="moonTable">
+        <thead class="table-dark">
+          <tr>
+            <th>{% trans "Moon" %}</th>
+            <th>{% trans "System" %}</th>
+            <th>{% trans "Region" %}</th>
+            <th>{% trans "Rarity" %}</th>
+            <th>{% trans "Structures" %}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for moon in moons %}
+          <tr>
+            <td>{{ moon.name }}</td>
+            <td>{{ moon.solar_system_name }}</td>
+            <td>{{ moon.region_name|default:"—" }}</td>
+            <td>
+              <span class="badge mm-rarity-{{ moon.rarity_class }}">
+                {{ moon.get_rarity_class_display|default:moon.rarity_class }}
+              </span>
+            </td>
+            <td>{{ moon.structures.count }}</td>
+            <td>
+              <a href="{% url 'moonmaster:moon_detail' moon.pk %}" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-chart-bar"></i> {% trans "Details" %}
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-muted text-center py-4">{% trans "No moons tracked yet. Add moons via the admin panel." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block moonmaster_js %}
+<script>
+  document.getElementById('moonSearch').addEventListener('input', function () {
+    const filter = this.value.toLowerCase();
+    document.querySelectorAll('#moonTable tbody tr').forEach(row => {
+      row.style.display = row.textContent.toLowerCase().includes(filter) ? '' : 'none';
+    });
+  });
+</script>
+{% endblock %}

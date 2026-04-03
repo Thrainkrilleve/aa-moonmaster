@@ -1,0 +1,144 @@
+"""
+Pricing service for Moon Master.
+
+Supports two price sources:
+  - ESI  : /markets/prices/ — adjusted price (same source the game uses)
+  - Fuzzwork : https://market.fuzzwork.co.uk/aggregates/ — buy/sell per type_id
+
+Call ``update_all_prices(type_ids, source)`` to refresh the OrePrice table.
+Call ``get_prices(type_ids)`` to retrieve a {type_id: Decimal} mapping from cache.
+"""
+
+import logging
+from decimal import Decimal
+from typing import Dict, Iterable, List
+
+import requests
+
+from .constants import PRICE_SOURCE_ESI, PRICE_SOURCE_FUZZWORK
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# ESI
+# ---------------------------------------------------------------------------
+
+ESI_PRICES_URL = "https://esi.evetech.net/latest/markets/prices/?datasource=tranquility"
+ESI_TYPES_URL = "https://esi.evetech.net/latest/universe/types/{type_id}/?datasource=tranquility"
+
+# Request timeout (seconds)
+_TIMEOUT = 30
+
+
+def _fetch_esi_prices() -> Dict[int, Decimal]:
+    """
+    Return a {type_id: adjusted_price} dict fetched from ESI /markets/prices/.
+    Raises requests.RequestException on failure.
+    """
+    resp = requests.get(ESI_PRICES_URL, timeout=_TIMEOUT)
+    resp.raise_for_status()
+    result: Dict[int, Decimal] = {}
+    for entry in resp.json():
+        type_id = int(entry["type_id"])
+        price = entry.get("adjusted_price") or entry.get("average_price")
+        if price is not None:
+            result[type_id] = Decimal(str(price))
+    return result
+
+
+def _fetch_esi_type_name(type_id: int) -> str:
+    """Fetch the English name for a type from ESI. Returns empty string on failure."""
+    try:
+        resp = requests.get(ESI_TYPES_URL.format(type_id=type_id), timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json().get("name", "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Fuzzwork
+# ---------------------------------------------------------------------------
+
+FUZZWORK_AGGREGATES_URL = "https://market.fuzzwork.co.uk/aggregates/"
+
+
+def _fetch_fuzzwork_prices(type_ids: Iterable[int]) -> Dict[int, Decimal]:
+    """
+    Return a {type_id: buy_max_price} dict from Fuzzwork's aggregates endpoint.
+    Uses the highest buy order price (Jita 4-4) as the valuation.
+    Raises requests.RequestException on failure.
+    """
+    ids_str = ",".join(str(i) for i in type_ids)
+    params = {"types": ids_str, "station": 60003760}  # Jita 4-4
+    resp = requests.get(FUZZWORK_AGGREGATES_URL, params=params, timeout=_TIMEOUT)
+    resp.raise_for_status()
+    data = resp.json()
+    result: Dict[int, Decimal] = {}
+    for type_id_str, prices in data.items():
+        try:
+            buy_max = prices.get("buy", {}).get("max", 0)
+            result[int(type_id_str)] = Decimal(str(buy_max))
+        except (KeyError, TypeError, ValueError):
+            pass
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Unified update + retrieval
+# ---------------------------------------------------------------------------
+
+
+def update_all_prices(type_ids: List[int], source: str = PRICE_SOURCE_ESI) -> int:
+    """
+    Fetch prices for the given type_ids and upsert into the OrePrice table.
+
+    Returns the number of records updated/created.
+    """
+    # Import here to avoid circular imports at module load time
+    from .models import OrePrice  # noqa: PLC0415
+
+    if source == PRICE_SOURCE_FUZZWORK:
+        try:
+            prices = _fetch_fuzzwork_prices(type_ids)
+        except requests.RequestException as exc:
+            logger.error("Fuzzwork price fetch failed: %s", exc)
+            return 0
+    else:
+        try:
+            all_prices = _fetch_esi_prices()
+        except requests.RequestException as exc:
+            logger.error("ESI price fetch failed: %s", exc)
+            return 0
+        prices = {tid: all_prices[tid] for tid in type_ids if tid in all_prices}
+
+    updated = 0
+    for type_id, price in prices.items():
+        obj, created = OrePrice.objects.update_or_create(
+            type_id=type_id,
+            defaults={
+                "avg_price": price,
+                "source": source,
+            },
+        )
+        # Back-fill name if missing
+        if not obj.type_name:
+            name = _fetch_esi_type_name(type_id)
+            if name:
+                OrePrice.objects.filter(pk=obj.pk).update(type_name=name)
+        updated += 1
+
+    logger.info("Updated %d prices from %s.", updated, source)
+    return updated
+
+
+def get_prices(type_ids: Iterable[int]) -> Dict[int, Decimal]:
+    """
+    Return a {type_id: avg_price} mapping from the OrePrice cache table.
+    Missing entries default to Decimal("0").
+    """
+    from .models import OrePrice  # noqa: PLC0415
+
+    rows = OrePrice.objects.filter(type_id__in=list(type_ids)).values("type_id", "avg_price")
+    result: Dict[int, Decimal] = {row["type_id"]: row["avg_price"] or Decimal("0") for row in rows}
+    return result

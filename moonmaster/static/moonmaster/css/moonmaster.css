@@ -1,0 +1,12 @@
+/* Moon Master — custom styles */
+
+/* Rarity class badges */
+.mm-rarity-ubiquitous  { background-color: #6c757d; color: #fff; }
+.mm-rarity-common      { background-color: #28a745; color: #fff; }
+.mm-rarity-uncommon    { background-color: #17a2b8; color: #fff; }
+.mm-rarity-rare        { background-color: #007bff; color: #fff; }
+.mm-rarity-exceptional { background-color: #dc3545; color: #fff; }
+
+/* Profit table tweaks */
+.mm-profit-table th { white-space: nowrap; }
+.mm-profit-table td.isk { font-variant-numeric: tabular-nums; text-align: right; }
