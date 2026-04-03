@@ -16,6 +16,7 @@ from decimal import Decimal
 from typing import Dict, Optional
 
 from .constants import (
+    ATHANOR_FUEL_BLOCKS_PER_HOUR_DEFAULT,
     ATHANOR_REPROCESSING_YIELD_DEFAULT,
     METENOX_FUEL_BLOCKS_PER_HOUR,
     METENOX_HARVEST_REPROCESS_YIELD,
@@ -81,6 +82,7 @@ class DrillResult:
 
     gross_isk_per_month: Decimal = _ZERO
     # Breakdown of deductions
+    fuel_cost_per_month: Decimal = _ZERO
     alliance_tax_isk: Decimal = _ZERO
     corp_tax_isk: Decimal = _ZERO
     reprocess_tax_isk: Decimal = _ZERO
@@ -136,12 +138,14 @@ class MoonProfitCalculator:
         reprocess_yield: float = ATHANOR_REPROCESSING_YIELD_DEFAULT,
         price_source: str = "esi",
         fleet_share_pct: float = 0.0,
+        athanor_fuel_blocks_per_hour: float = ATHANOR_FUEL_BLOCKS_PER_HOUR_DEFAULT,
     ):
         self.moon = moon
         self.tax_config = tax_config
         self.reprocess_yield = Decimal(str(reprocess_yield))
         self.price_source = price_source
         self.fleet_share_pct = Decimal(str(fleet_share_pct))
+        self._athanor_fuel_blocks_per_hour = Decimal(str(athanor_fuel_blocks_per_hour))
 
         # Tax rates as Decimal fractions
         if tax_config:
@@ -169,8 +173,7 @@ class MoonProfitCalculator:
         Athanor drill extraction, all ore mined by players (or sold as raw).
 
         Gross value = full ore volume per month × raw ore price.
-        No fuel cost for Athanor (it uses its own fuel, not tracked here as
-        an income-affecting cost; add it to sov_upkeep_daily_isk if desired).
+        Fuel cost = fuel blocks/hr (from fitted service modules) × hours/month × price.
         """
         total_volume = Decimal(str(MOONMINING_VOLUME_PER_DAY)) * _DAYS_PER_MONTH
 
@@ -181,16 +184,21 @@ class MoonProfitCalculator:
             reprocess_yield=float(self.reprocess_yield),
         )
 
+        hours_per_month = _HOURS_PER_DAY * _DAYS_PER_MONTH
+        fuel_price = self._prices.get(ESI_TYPE_ID_NITROGEN_FUEL_BLOCK, _ZERO)
+        fuel_cost = self._athanor_fuel_blocks_per_hour * hours_per_month * fuel_price
+
         alliance_tax = gross * self._alliance_tax
         corp_tax = gross * self._corp_tax
         reprocess_tax = gross * self._reprocess_tax
         sov = self._sov_upkeep_monthly
         corp_fleet_share = gross * self.fleet_share_pct
 
-        net = gross - alliance_tax - corp_tax - reprocess_tax - sov
+        net = gross - fuel_cost - alliance_tax - corp_tax - reprocess_tax - sov
 
         return DrillResult(
             gross_isk_per_month=gross,
+            fuel_cost_per_month=fuel_cost,
             alliance_tax_isk=alliance_tax,
             corp_tax_isk=corp_tax,
             reprocess_tax_isk=reprocess_tax,
@@ -269,6 +277,7 @@ class MoonProfitCalculator:
             "price_source": table.price_source,
             "drill": {
                 "gross_isk_per_month": _dec(table.drill.gross_isk_per_month),
+                "fuel_cost_per_month": _dec(table.drill.fuel_cost_per_month),
                 "alliance_tax_isk": _dec(table.drill.alliance_tax_isk),
                 "corp_tax_isk": _dec(table.drill.corp_tax_isk),
                 "reprocess_tax_isk": _dec(table.drill.reprocess_tax_isk),

@@ -1,5 +1,5 @@
 {% extends "moonmaster/base.html" %}
-{% load i18n %}
+{% load i18n moonmaster_tags %}
 
 {% block moonmaster_content %}
 <div class="container-fluid">
@@ -29,10 +29,10 @@
             <td>{{ row.moon.solar_system_name }}</td>
             <td><span class="badge mm-rarity-{{ row.moon.rarity_class }}">{{ row.moon.get_rarity_class_display }}</span></td>
             <td class="text-end {% if d.net_isk_per_month > 0 %}text-success{% else %}text-danger{% endif %}">
-              {{ d.net_isk_per_month|floatformat:0 }} ISK
+              {{ d.net_isk_per_month|floatformat:0|intcomma }} ISK
             </td>
             <td class="text-end {% if m.net_isk_per_month > 0 %}text-success{% else %}text-danger{% endif %}">
-              {{ m.net_isk_per_month|floatformat:0 }} ISK
+              {{ m.net_isk_per_month|floatformat:0|intcomma }} ISK
             </td>
             <td class="text-end fw-bold">
               {% if m.net_isk_per_month > d.net_isk_per_month %}

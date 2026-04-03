@@ -105,6 +105,33 @@ FUEL_BLOCK_TYPE_IDS = [
 ]
 
 # ---------------------------------------------------------------------------
+# Structure service module fuel consumption
+# Source: EVE SDE dogmaAttribute 2109 (serviceModuleFuelAmount)
+# Maps the ESI structure service name string → fuel blocks per hour
+# ---------------------------------------------------------------------------
+ATHANOR_FUEL_BLOCKS_PER_HOUR_DEFAULT = 5  # Standup Moon Drill I baseline
+
+SERVICE_MODULE_FUEL_PER_HOUR: dict = {
+    # Moon-mining services
+    "moon_drilling":          5,   # Standup Moon Drill I (type 45009)
+    "metenox_moon_drill":     5,   # Standup Metenox Moon Drill (type 82941)
+    # Manufacturing / science
+    "manufacturing":         12,   # Standup Manufacturing Plant I (type 35878)
+    "invention":             12,   # Standup Invention Lab I (type 35886)
+    "laboratory":            12,   # Standup Research Lab I (type 35891)
+    # Reactions
+    "composite_reactions":   15,   # Standup Composite Reactor I (type 45537)
+    "hybrid_reactions":      15,   # Standup Hybrid Reactor I (type 45538)
+    "biochemical_reactions": 15,   # Standup Biochemical Reactor I (type 45539)
+    # Refining / compression
+    "reprocessing":          10,   # Standup Reprocessing Facility I (type 35899)
+    "compression":            5,   # Structure Compression Plant (type 35900)
+    # Other services
+    "cloning":               10,   # Standup Cloning Center I (type 35894)
+    "market":                40,   # Standup Market Hub I (type 35892)
+}
+
+# ---------------------------------------------------------------------------
 # Moon ore packaged volume (m³/unit) — used to convert ESI ISK/unit → ISK/m³
 # Source: EVE SDE / in-game show info.  All standard moon ores are 0.1 m³/unit.
 # ---------------------------------------------------------------------------

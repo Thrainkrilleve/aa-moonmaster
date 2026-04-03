@@ -129,6 +129,7 @@
               {% if table.drill %}
               <table class="table table-sm">
                 <tr><th>{% trans "Gross Value/mo" %}</th><td class="text-end">{{ table.drill.gross_isk_per_month|floatformat:0|intcomma }} ISK</td></tr>
+                <tr class="text-danger"><th>{% trans "Fuel Blocks" %}</th><td class="text-end">&minus; {{ table.drill.fuel_cost_per_month|floatformat:0|intcomma }} ISK</td></tr>
                 <tr class="text-danger"><th>{% trans "Alliance Tax" %}</th><td class="text-end">&minus; {{ table.drill.alliance_tax_isk|floatformat:0|intcomma }} ISK</td></tr>
                 <tr class="text-danger"><th>{% trans "Corp Tax" %}</th><td class="text-end">&minus; {{ table.drill.corp_tax_isk|floatformat:0|intcomma }} ISK</td></tr>
                 <tr class="text-danger"><th>{% trans "Reprocess Tax" %}</th><td class="text-end">&minus; {{ table.drill.reprocess_tax_isk|floatformat:0|intcomma }} ISK</td></tr>

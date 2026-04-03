@@ -121,6 +121,14 @@ class Structure(models.Model):
         help_text=_("Percentage of the moon material bay that is currently filled."),
     )
 
+    # Fuel cost derived from fitted service modules (synced from ESI services)
+    fuel_blocks_per_hour = models.FloatField(
+        default=0.0,
+        verbose_name=_("Fuel Blocks/hr"),
+        help_text=_("Sum of fuel blocks/hour consumed by all online service modules. "
+                    "Derived from ESI structure services."),
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 REQUIRED_SCOPES: List[str] = [
     "esi-corporations.read_structures.v1",
     "esi-industry.read_corporation_mining.v1",
+    "esi-universe.read_structures.v1",
+    "esi-assets.read_corporation_assets.v1",
 ]
 
 SCOPE_STRUCTURES = "esi-corporations.read_structures.v1"

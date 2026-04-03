@@ -86,7 +86,7 @@ def _sync_owner_structures(owner):
     """Pull ESI /corporations/{id}/structures/ and upsert Structure records."""
     from django.utils.dateparse import parse_datetime
 
-    from .constants import STRUCTURE_TYPE_ATHANOR, STRUCTURE_TYPE_METENOX
+    from .constants import STRUCTURE_TYPE_ATHANOR, STRUCTURE_TYPE_METENOX, SERVICE_MODULE_FUEL_PER_HOUR
     from .models import Structure
     from .providers import (
         ATHANOR_TYPE_ID,
@@ -145,6 +145,14 @@ def _sync_owner_structures(owner):
         is_online = structure_is_online(s.get("state", ""))
         system_id = s.get("system_id")
 
+        # Sum fuel blocks/hr from all online service modules
+        services = s.get("services", [])
+        fuel_per_hr = float(sum(
+            SERVICE_MODULE_FUEL_PER_HOUR.get(svc.get("name", ""), 0)
+            for svc in services
+            if svc.get("state") == "online"
+        ))
+
         obj, _ = Structure.objects.update_or_create(
             structure_id=s["structure_id"],
             defaults={
@@ -153,6 +161,7 @@ def _sync_owner_structures(owner):
                 "structure_type": structure_type,
                 "is_online": is_online,
                 "fuel_expires": fuel_expires,
+                "fuel_blocks_per_hour": fuel_per_hr,
             },
         )
         if obj.moon_id is None:

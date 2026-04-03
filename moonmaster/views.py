@@ -103,11 +103,20 @@ def moon_detail(request, moon_id):
     tax_config = _get_tax_config(request.user)
     fleet_share_pct = float(request.GET.get("fleet_share", 0.0))
 
+    # Use fuel from linked Athanor structures; fall back to SDE default (5 blocks/hr)
+    from .constants import ATHANOR_FUEL_BLOCKS_PER_HOUR_DEFAULT, STRUCTURE_TYPE_ATHANOR
+    athanor_fuel = max(
+        (s.fuel_blocks_per_hour for s in moon.structures.filter(structure_type=STRUCTURE_TYPE_ATHANOR)
+         if s.fuel_blocks_per_hour > 0),
+        default=float(ATHANOR_FUEL_BLOCKS_PER_HOUR_DEFAULT),
+    )
+
     calculator = MoonProfitCalculator(
         moon=moon,
         tax_config=tax_config,
         fleet_share_pct=fleet_share_pct,
         price_source="fuzzwork",
+        athanor_fuel_blocks_per_hour=athanor_fuel,
     )
     table = calculator.comparison_table()
 
