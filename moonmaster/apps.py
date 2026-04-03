@@ -8,6 +8,10 @@ class MoonMasterConfig(AppConfig):
     label = "moonmaster"
 
     def ready(self):
+        # Import hooks module so @hooks.register decorators execute and the
+        # menu_item_hook / url_hook are registered with AllianceAuth.
+        from . import hooks  # noqa: F401
+
         # AA v4 uses a DB-driven, cache-guarded menu sync.  Once the cache key
         # is set, sync_all() never re-runs even if a new app is installed.
         # Clearing the key here (on every Django startup) ensures our MenuItem
