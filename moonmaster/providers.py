@@ -130,6 +130,9 @@ def esi_authed_get(path: str, token, params: Optional[dict] = None) -> list:
     url = f"{ESI_BASE}{path}"
 
     resp = requests.get(url, headers=headers, params={**base, "page": 1}, timeout=ESI_TIMEOUT)
+    if resp.status_code == 404:
+        # ESI returns 404 when an endpoint has no data (e.g. no active extractions).
+        return []
     resp.raise_for_status()
     data = resp.json()
 
