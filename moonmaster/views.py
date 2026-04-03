@@ -314,8 +314,12 @@ def _parse_and_import_survey(raw: str) -> dict:
     """
     Parse an in-game moon probe scanner export and upsert Moon records.
 
-    Expected format (tab-separated with optional header row):
-      Moon  TypeID  Quantity  SolarSystemID  PlanetID  MoonID
+    The EVE export is tab-separated with a 7-column header row followed by
+    moon name rows and ore rows.  Per ore row the columns are:
+
+      [0] ""  [1] OreName  [2] Quantity  [3] OreTypeID  [4] SolarSystemID  [5] PlanetID  [6] MoonID
+
+    Moon name rows have the moon name in [0] and the rest empty/absent.
 
     Returns {'created': int, 'updated': int, 'errors': list[str]}.
     """
@@ -326,22 +330,26 @@ def _parse_and_import_survey(raw: str) -> dict:
     moon_rows: dict = {}
 
     for lineno, line in enumerate(raw.splitlines(), 1):
-        line = line.strip()
-        if not line or line.lower().startswith("moon\t"):
+        line = line.rstrip("\r")
+        if not line.strip():
             continue
         cols = line.split("\t")
-        if len(cols) < 6:
-            errors.append(f"Line {lineno}: expected 6 columns, got {len(cols)}")
+        # Skip the header row and moon-name rows (non-empty first column)
+        if cols[0].strip():
+            continue
+        # Ore rows: need at least 7 columns
+        if len(cols) < 7:
+            errors.append(f"Line {lineno}: expected 7 columns, got {len(cols)}")
             continue
         try:
-            moon_id = int(cols[5])
-            type_id = int(cols[1])
-            quantity = float(cols[2])
+            moon_id = int(cols[6])   # MoonID
+            type_id = int(cols[3])   # Ore TypeID
+            quantity = float(cols[2])  # Quantity / fraction
         except (ValueError, IndexError) as exc:
             errors.append(f"Line {lineno}: {exc}")
             continue
         if moon_id not in moon_rows:
-            moon_rows[moon_id] = {"composition": {}, "name": cols[0]}
+            moon_rows[moon_id] = {"composition": {}}
         moon_rows[moon_id]["composition"][str(type_id)] = quantity
 
     for moon_id, data in moon_rows.items():

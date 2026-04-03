@@ -18,9 +18,11 @@
         </div>
         <div class="card-body">
           <p class="text-muted small mb-3">
-            {% trans "Paste the tab-separated export from the in-game moon probe scanner. Each row represents one ore type on one moon." %}
-            <br>
-            {% trans "Format:" %} <code>Moon&nbsp;&nbsp;TypeID&nbsp;&nbsp;Quantity&nbsp;&nbsp;SolarSystemID&nbsp;&nbsp;PlanetID&nbsp;&nbsp;MoonID</code>
+            {% trans "Paste the tab-separated export from the in-game moon drill scanner. Include the header row — it will be ignored automatically." %}
+          </p>
+          <p class="text-muted small mb-2">
+            {% trans "Column layout (7 columns, tab-separated):" %}<br>
+            <code>Moon&nbsp;&nbsp;Moon&nbsp;Product&nbsp;&nbsp;Quantity&nbsp;&nbsp;Ore&nbsp;TypeID&nbsp;&nbsp;SolarSystemID&nbsp;&nbsp;PlanetID&nbsp;&nbsp;MoonID</code>
           </p>
           <form method="post">
             {% csrf_token %}
@@ -28,7 +30,7 @@
               <textarea name="scan_data"
                         class="form-control font-monospace"
                         rows="18"
-                        placeholder="Moon&#9;TypeID&#9;Quantity&#9;SolarSystemID&#9;PlanetID&#9;MoonID&#10;Jita IV - Moon 4&#9;45492&#9;0.300000&#9;30000142&#9;40000001&#9;40000004"></textarea>
+                        placeholder="Moon&#9;Moon Product&#9;Quantity&#9;Ore TypeID&#9;SolarSystemID&#9;PlanetID&#9;MoonID&#10;Jita IV - Moon 4&#9;&#9;&#9;&#9;&#9;&#9;&#10;&#9;Bitumens&#9;0.270000&#9;45492&#9;30000142&#9;40000001&#9;40000002&#10;&#9;Cobaltite&#9;0.330000&#9;45494&#9;30000142&#9;40000001&#9;40000002&#10;&#9;Carnotite&#9;0.200000&#9;45502&#9;30000142&#9;40000001&#9;40000002&#10;&#9;Xenotime&#9;0.200000&#9;45506&#9;30000142&#9;40000001&#9;40000002"></textarea>
             </div>
             <button type="submit" class="btn btn-primary">
               <i class="fas fa-upload me-1"></i>{% trans "Import" %}
@@ -47,8 +49,8 @@
           <ol class="ps-3 mb-0">
             <li class="mb-2">{% trans "Anchor and online an Athanor or Metenox on the target moon." %}</li>
             <li class="mb-2">{% trans "Open the Structure window and go to the Moon Drill tab." %}</li>
-            <li class="mb-2">{% trans "Start a moon probe scan and wait for results." %}</li>
-            <li class="mb-2">{% trans 'Click "Export" — this copies tab-separated data to your clipboard.' %}</li>
+            <li class="mb-2">{% trans "Start a moon probe drill scan and wait for results (~1 hour)." %}</li>
+            <li class="mb-2">{% trans 'Click the clipboard icon (Export) next to the scan results — this copies tab-separated data to your clipboard.' %}</li>
             <li>{% trans "Paste here and click Import." %}</li>
           </ol>
         </div>
