@@ -105,6 +105,40 @@ FUEL_BLOCK_TYPE_IDS = [
 ]
 
 # ---------------------------------------------------------------------------
+# Moon ore packaged volume (m³/unit) — used to convert ESI ISK/unit → ISK/m³
+# Source: EVE SDE / in-game show info.  All standard moon ores are 0.1 m³/unit.
+# ---------------------------------------------------------------------------
+MOON_ORE_VOLUME_M3: dict = {
+    # R4 Ubiquitous
+    45490: 0.1,  # Zeolites
+    45491: 0.1,  # Sylvite
+    45492: 0.1,  # Bitumens
+    45493: 0.1,  # Coesite
+    # R8 Common
+    45494: 0.1,  # Cobaltite
+    45495: 0.1,  # Euxenite
+    45496: 0.1,  # Titanite
+    45497: 0.1,  # Scheelite
+    # R16 Uncommon
+    45498: 0.1,  # Otavite
+    45499: 0.1,  # Sperrylite
+    45500: 0.1,  # Vanadinite
+    45501: 0.1,  # Chromite
+    # R32 Rare
+    45502: 0.1,  # Carnotite
+    45503: 0.1,  # Zircon
+    45504: 0.1,  # Loparite
+    45505: 0.1,  # Monazite
+    # R64 Exceptional
+    45506: 0.1,  # Xenotime
+    45507: 0.1,  # Ytterbite
+    45508: 0.1,  # Pollucite
+    45509: 0.1,  # Cinnabar
+}
+# Default volume for any ore type not listed above
+MOON_ORE_VOLUME_DEFAULT_M3 = 0.1
+
+# ---------------------------------------------------------------------------
 # Moon ore type_id → human-readable name
 # ---------------------------------------------------------------------------
 MOON_ORE_NAMES: dict = {

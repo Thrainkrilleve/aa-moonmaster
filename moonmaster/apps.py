@@ -12,6 +12,41 @@ class MoonMasterConfig(AppConfig):
         # menu_item_hook / url_hook are registered with AllianceAuth.
         from . import hooks  # noqa: F401
 
+        # Register periodic Celery Beat tasks.
+        self._register_celery_schedules()
+
+    @staticmethod
+    def _register_celery_schedules():
+        from django.conf import settings
+        from celery.schedules import crontab
+
+        schedule = getattr(settings, "CELERYBEAT_SCHEDULE", None)
+        if schedule is None:
+            # Celery Beat is not configured in this environment; skip.
+            return
+
+        schedule["moonmaster.update_prices"] = {
+            "task": "moonmaster.tasks.update_prices",
+            "schedule": crontab(minute=0, hour="*/12"),
+        }
+        schedule["moonmaster.update_all_structures"] = {
+            "task": "moonmaster.tasks.update_all_structures",
+            "schedule": crontab(minute="*/30"),
+        }
+        schedule["moonmaster.update_extractions"] = {
+            "task": "moonmaster.tasks.update_extractions",
+            "schedule": crontab(minute="*/10"),
+        }
+        schedule["moonmaster.send_alerts"] = {
+            "task": "moonmaster.tasks.send_alerts",
+            "schedule": crontab(minute="*/10"),
+        }
+        schedule["moonmaster.sync_mining_ledger"] = {
+            "task": "moonmaster.tasks.sync_mining_ledger",
+            "schedule": crontab(minute=0),
+        }
+
+
         # AA v4 uses a DB-driven, cache-guarded menu sync.  Once the cache key
         # is set, sync_all() never re-runs even if a new app is installed.
         # Clearing the key here (on every Django startup) ensures our MenuItem

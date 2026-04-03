@@ -30,6 +30,7 @@ REQUIRED_SCOPES: List[str] = [
 
 SCOPE_STRUCTURES = "esi-corporations.read_structures.v1"
 SCOPE_MINING     = "esi-industry.read_corporation_mining.v1"
+SCOPE_ASSETS     = "esi-assets.read_corporation_assets.v1"
 
 # EVE type IDs for moon-mining structures
 ATHANOR_TYPE_ID  = 35835

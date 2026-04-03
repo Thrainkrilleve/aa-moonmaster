@@ -25,6 +25,8 @@ from .constants import (
     MOONMINING_VOLUME_PER_DAY,
     ESI_TYPE_ID_NITROGEN_FUEL_BLOCK,
     ESI_TYPE_ID_MAGMATIC_GAS,
+    MOON_ORE_VOLUME_M3,
+    MOON_ORE_VOLUME_DEFAULT_M3,
 )
 from .pricing import get_prices
 
@@ -48,19 +50,24 @@ def _ore_gross_value(
 
     :param ore_composition: {type_id_str: fraction} (fractions sum to 1.0)
     :param total_volume_m3: Total ore volume in m³
-    :param prices: {type_id: price_per_unit}
+    :param prices: {type_id: price_per_UNIT} from ESI/Fuzzwork
     :param reprocess_yield: Multiplier applied to price (1.0 = sell raw, <1 = after reprocessing loss)
+
+    ESI prices are ISK/unit.  We divide by the ore's packaged volume (m³/unit)
+    to get ISK/m³, then multiply by the m³ of that ore in the chunk.
     """
-    # We need m³ per type and the ISK/m³ for each ore.
-    # ESI prices are per item, not per m³.  We use the convention that
-    # ``prices`` stores ISK/m³ for raw ore (caller is responsible for
-    # supplying the right unit via ``pricing.get_prices``).
     total = _ZERO
     for type_id_str, fraction in ore_composition.items():
         type_id = int(type_id_str)
+        ore_volume_m3 = Decimal(str(
+            MOON_ORE_VOLUME_M3.get(type_id, MOON_ORE_VOLUME_DEFAULT_M3)
+        ))
+        price_per_unit = prices.get(type_id, _ZERO)
+        if ore_volume_m3 == _ZERO:
+            continue
+        price_per_m3 = price_per_unit / ore_volume_m3
         volume = total_volume_m3 * Decimal(str(fraction))
-        price = prices.get(type_id, _ZERO)
-        total += volume * price * Decimal(str(reprocess_yield))
+        total += volume * price_per_m3 * Decimal(str(reprocess_yield))
     return total
 
 

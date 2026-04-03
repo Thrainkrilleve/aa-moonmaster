@@ -173,6 +173,57 @@
     </div>
   </div>
 </div>
+
+<!-- Extractions -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-bold">
+        <i class="fas fa-meteor me-1"></i>{% trans "Extraction History" %}
+      </div>
+      <div class="card-body p-0">
+        {% if extractions %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>{% trans "Structure" %}</th>
+              <th>{% trans "Start" %}</th>
+              <th>{% trans "Chunk Arrival" %}</th>
+              <th>{% trans "Auto-Fire" %}</th>
+              <th>{% trans "Status" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ext in extractions %}
+            <tr>
+              <td>{{ ext.structure.name|default:ext.structure.structure_id }}</td>
+              <td>{{ ext.extraction_start_time|date:"Y-m-d H:i" }}</td>
+              <td>{{ ext.chunk_arrival_time|date:"Y-m-d H:i" }}</td>
+              <td>{{ ext.natural_decay_time|date:"Y-m-d H:i" }}</td>
+              <td>
+                {% if ext.status == "fired" %}
+                  <span class="badge bg-success">{% trans "Fired" %}</span>
+                {% elif ext.status == "ready" %}
+                  <span class="badge bg-warning text-dark">{% trans "Ready" %}</span>
+                {% elif ext.status == "scheduled" %}
+                  <span class="badge bg-primary">{% trans "Scheduled" %}</span>
+                {% elif ext.status == "cancelled" %}
+                  <span class="badge bg-secondary">{% trans "Cancelled" %}</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ ext.status }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted m-3">{% trans "No extraction records for this moon." %}</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block moonmaster_js %}

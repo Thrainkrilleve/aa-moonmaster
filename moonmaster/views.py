@@ -1,9 +1,11 @@
 import json
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from esi.decorators import token_required
@@ -68,6 +70,8 @@ def dashboard(request):
         "low_fuel_structures": Structure.objects.filter(
             structure_type=STRUCTURE_TYPE_METENOX,
             is_online=True,
+            fuel_expires__isnull=False,
+            fuel_expires__lte=timezone.now() + timedelta(days=7),
         ).select_related("moon").order_by("fuel_expires")[:10],
     }
     return render(request, "moonmaster/dashboard.html", context)
@@ -98,9 +102,9 @@ def moon_detail(request, moon_id):
     context = {
         "moon": moon,
         "structures": moon.structures.select_related("owner__corporation"),
-        "extractions": moon.structures.prefetch_related(
-            "extractions"
-        ),
+        "extractions": Extraction.objects.filter(
+            structure__moon=moon,
+        ).select_related("structure__owner__corporation").order_by("-chunk_arrival_time")[:20],
         "table": table,
         "fleet_share_pct": fleet_share_pct,
         "ore_rows": _build_ore_rows(moon),
@@ -187,6 +191,7 @@ def manage_owners(request):
     "esi-corporations.read_structures.v1",
     "esi-industry.read_corporation_mining.v1",
     "esi-universe.read_structures.v1",
+    "esi-assets.read_corporation_assets.v1",
 ])
 def add_owner(request, token):
     """

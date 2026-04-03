@@ -6,6 +6,7 @@ Schedule (suggested via Django-Q or AA's built-in crontab):
   - update_all_structures: every 1 hour
   - update_extractions   : every 10 minutes
   - send_alerts          : every 10 minutes
+  - sync_mining_ledger   : every 1 hour
 """
 
 import logging
@@ -158,6 +159,9 @@ def _sync_owner_structures(owner):
             _try_link_structure_to_moon(obj, system_id, token)
         updated += 1
 
+    # Sync goo bay fill % for Metenox structures (requires assets scope)
+    _sync_metenox_bays(owner, token)
+
     logger.info("_sync_owner_structures: %s — updated %d structure(s).", owner, updated)
     owner.last_sync = timezone.now()
     owner.sync_error = ""
@@ -232,6 +236,7 @@ def _sync_owner_extractions(owner):
 
     now = timezone.now()
     updated = 0
+    active_keys = set()  # (structure_id, extraction_start_time) for active ESI extractions
     for ext in extractions:
         moon_id = ext.get("moon_id")
         structure_id = ext.get("structure_id")
@@ -254,6 +259,7 @@ def _sync_owner_extractions(owner):
             structure.save(update_fields=["moon"])
 
         chunk_arrival = parse_datetime(ext["chunk_arrival_time"])
+        start_time = parse_datetime(ext["extraction_start_time"])
         status = (
             Extraction.Status.READY
             if chunk_arrival and chunk_arrival <= now
@@ -262,19 +268,180 @@ def _sync_owner_extractions(owner):
 
         Extraction.objects.update_or_create(
             structure=structure,
-            extraction_start_time=parse_datetime(ext["extraction_start_time"]),
+            extraction_start_time=start_time,
             defaults={
                 "chunk_arrival_time": chunk_arrival,
                 "natural_decay_time": parse_datetime(ext["natural_decay_time"]),
                 "status": status,
             },
         )
+        active_keys.add((structure_id, start_time))
         updated += 1
+
+    # Mark extractions that disappeared from ESI as FIRED or CANCELLED.
+    # Any SCHEDULED/READY extraction for this owner that is no longer in the
+    # active_keys set has either been fired (chunk_arrival_time in the past)
+    # or cancelled (chunk_arrival_time still in the future).
+    owned_structure_ids = list(
+        Structure.objects.filter(owner=owner).values_list("structure_id", flat=True)
+    )
+    stale_qs = Extraction.objects.filter(
+        structure__structure_id__in=owned_structure_ids,
+        status__in=[Extraction.Status.SCHEDULED, Extraction.Status.READY],
+    )
+    fired_ids = []
+    cancelled_ids = []
+    for ext_obj in stale_qs.select_related("structure"):
+        key = (ext_obj.structure.structure_id, ext_obj.extraction_start_time)
+        if key in active_keys:
+            continue
+        if ext_obj.chunk_arrival_time and ext_obj.chunk_arrival_time <= now:
+            fired_ids.append(ext_obj.pk)
+        else:
+            cancelled_ids.append(ext_obj.pk)
+
+    if fired_ids:
+        Extraction.objects.filter(pk__in=fired_ids).update(status=Extraction.Status.FIRED)
+        logger.info(
+            "_sync_owner_extractions: %s — marked %d extraction(s) as FIRED.", owner, len(fired_ids)
+        )
+    if cancelled_ids:
+        Extraction.objects.filter(pk__in=cancelled_ids).update(status=Extraction.Status.CANCELLED)
+        logger.info(
+            "_sync_owner_extractions: %s — marked %d extraction(s) as CANCELLED.", owner, len(cancelled_ids)
+        )
 
     logger.info("_sync_owner_extractions: %s — updated %d extraction(s).", owner, updated)
     owner.last_sync = timezone.now()
     owner.sync_error = ""
     owner.save(update_fields=["last_sync", "sync_error"])
+
+
+# ---------------------------------------------------------------------------
+# Mining ledger
+# ---------------------------------------------------------------------------
+
+@shared_task(bind=True, name="moonmaster.tasks.sync_mining_ledger")
+def sync_mining_ledger(self):
+    """
+    Fetch the corporation mining observer ledger from ESI for all active
+    owners, then create/update MiningLedgerEntry records linked to the
+    relevant Extraction.
+    """
+    try:
+        from .models import StructureOwner
+
+        for owner in StructureOwner.objects.filter(is_active=True):
+            _sync_owner_mining_ledger(owner)
+    except Exception as exc:
+        logger.exception("moonmaster.sync_mining_ledger failed: %s", exc)
+        raise self.retry(exc=exc, countdown=60, max_retries=3)
+
+
+def _sync_owner_mining_ledger(owner):
+    """
+    Pull ESI /corporations/{id}/mining/observers/ and each observer's ledger,
+    then upsert MiningLedgerEntry rows linked to matching Extraction records.
+    """
+    from django.utils.dateparse import parse_date
+
+    from allianceauth.eveonline.models import EveCharacter
+
+    from .constants import MOON_ORE_NAMES
+    from .models import Extraction, MiningLedgerEntry, Structure
+    from .providers import (
+        SCOPE_MINING,
+        get_valid_token,
+        refresh_token,
+        esi_authed_get,
+    )
+
+    if not owner.character:
+        return
+
+    token = get_valid_token(owner.character.character_id, [SCOPE_MINING])
+    if not token or not refresh_token(token):
+        logger.warning("_sync_owner_mining_ledger: no valid mining token for %s.", owner)
+        return
+
+    corp_id = owner.corporation.corporation_id
+
+    try:
+        observers = esi_authed_get(f"/corporations/{corp_id}/mining/observers/", token)
+    except Exception as exc:
+        logger.warning("_sync_owner_mining_ledger: observers fetch failed for %s: %s", owner, exc)
+        return
+
+    # Build a map of structure_id → Structure for this owner's Metenox/Athanor
+    owned_structure_ids = set(
+        Structure.objects.filter(owner=owner).values_list("structure_id", flat=True)
+    )
+
+    created_total = 0
+    for obs in observers:
+        observer_id = obs.get("observer_id")
+        if observer_id not in owned_structure_ids:
+            continue  # skip observers for structures not in our DB yet
+
+        try:
+            structure = Structure.objects.get(structure_id=observer_id)
+        except Structure.DoesNotExist:
+            continue
+
+        try:
+            ledger = esi_authed_get(
+                f"/corporations/{corp_id}/mining/observers/{observer_id}/", token
+            )
+        except Exception as exc:
+            logger.warning(
+                "_sync_owner_mining_ledger: ledger fetch failed for observer %s: %s",
+                observer_id, exc,
+            )
+            continue
+
+        for entry in ledger:
+            char_id = entry.get("character_id")
+            type_id = entry.get("type_id")
+            quantity = entry.get("quantity", 0)
+            recorded_date_str = entry.get("last_updated") or entry.get("recorded_date")
+            if not (char_id and type_id and recorded_date_str):
+                continue
+
+            recorded_date = parse_date(recorded_date_str)
+            if not recorded_date:
+                continue
+
+            # Find the Extraction whose window covers recorded_date
+            extraction = (
+                Extraction.objects.filter(
+                    structure=structure,
+                    extraction_start_time__date__lte=recorded_date,
+                    chunk_arrival_time__date__gte=recorded_date,
+                )
+                .order_by("-chunk_arrival_time")
+                .first()
+            )
+
+            character = EveCharacter.objects.filter(character_id=char_id).first()
+            ore_name = MOON_ORE_NAMES.get(type_id, "")
+
+            _, created = MiningLedgerEntry.objects.update_or_create(
+                extraction=extraction,
+                character=character,
+                ore_type_id=type_id,
+                recorded_date=recorded_date,
+                defaults={
+                    "quantity": quantity,
+                    "ore_type_name": ore_name,
+                },
+            )
+            if created:
+                created_total += 1
+
+    logger.info(
+        "_sync_owner_mining_ledger: %s — created %d new ledger entry(ies).",
+        owner, created_total,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +643,61 @@ def sync_owner(self, owner_id: int):
     except Exception as exc:
         logger.exception("moonmaster.sync_owner(%d) failed: %s", owner_id, exc)
         raise self.retry(exc=exc, countdown=30, max_retries=3)
+
+
+def _sync_metenox_bays(owner, structures_token):
+    """
+    Fetch corporation assets, sum moon material volumes per Metenox structure,
+    and update Structure.goo_bay_fill_pct.
+
+    Requires esi-assets.read_corporation_assets.v1.  Silently skipped if the
+    owner's character doesn't have that scope.
+    """
+    from .constants import STRUCTURE_TYPE_METENOX, METENOX_MOON_MATERIAL_BAY_CAPACITY, MOON_ORE_VOLUME_M3, MOON_ORE_VOLUME_DEFAULT_M3
+    from .models import Structure
+    from .providers import (
+        SCOPE_ASSETS,
+        get_valid_token,
+        refresh_token,
+        esi_authed_get,
+    )
+
+    assets_token = get_valid_token(owner.character.character_id, [SCOPE_ASSETS])
+    if not assets_token or not refresh_token(assets_token):
+        logger.debug("_sync_metenox_bays: no assets token for %s — skipping.", owner)
+        return
+
+    corp_id = owner.corporation.corporation_id
+    try:
+        assets = esi_authed_get(f"/corporations/{corp_id}/assets/", assets_token)
+    except Exception as exc:
+        logger.warning("_sync_metenox_bays: assets fetch failed for %s: %s", owner, exc)
+        return
+
+    # Sum volume of moon material bay items per structure
+    bay_volumes: dict = {}
+    for item in assets:
+        if item.get("location_flag") != "MoonMaterialBay":
+            continue
+        loc_id = item.get("location_id")
+        type_id = item.get("type_id", 0)
+        quantity = item.get("quantity", 0)
+        vol_per_unit = MOON_ORE_VOLUME_M3.get(type_id, MOON_ORE_VOLUME_DEFAULT_M3)
+        bay_volumes[loc_id] = bay_volumes.get(loc_id, 0.0) + quantity * vol_per_unit
+
+    # Update matching Metenox Structure records
+    metenox_sids = list(
+        Structure.objects.filter(
+            owner=owner, structure_type=STRUCTURE_TYPE_METENOX
+        ).values_list("structure_id", flat=True)
+    )
+    for structure_id in metenox_sids:
+        vol = bay_volumes.get(structure_id, 0.0)
+        fill_pct = min(vol / METENOX_MOON_MATERIAL_BAY_CAPACITY * 100.0, 100.0)
+        Structure.objects.filter(structure_id=structure_id).update(
+            goo_bay_fill_pct=round(fill_pct, 1)
+        )
+    logger.debug("_sync_metenox_bays: updated bay fill for %d Metenox(es) under %s.", len(metenox_sids), owner)
 
 
 def _try_link_structure_to_moon(structure, system_id, token):
