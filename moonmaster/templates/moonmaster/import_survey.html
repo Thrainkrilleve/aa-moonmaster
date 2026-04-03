@@ -1,0 +1,73 @@
+{% extends "moonmaster/base.html" %}
+{% load i18n %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h2><i class="fas fa-file-import me-2"></i>{% trans "Import Moon Survey" %}</h2>
+    <a href="{% url 'moonmaster:moon_list' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i>{% trans "Back to Moons" %}
+    </a>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header fw-bold">
+          <i class="fas fa-paste me-1"></i>{% trans "Paste Moon Probe Scanner Export" %}
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            {% trans "Paste the tab-separated export from the in-game moon probe scanner. Each row represents one ore type on one moon." %}
+            <br>
+            {% trans "Format:" %} <code>Moon&nbsp;&nbsp;TypeID&nbsp;&nbsp;Quantity&nbsp;&nbsp;SolarSystemID&nbsp;&nbsp;PlanetID&nbsp;&nbsp;MoonID</code>
+          </p>
+          <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+              <textarea name="scan_data"
+                        class="form-control font-monospace"
+                        rows="18"
+                        placeholder="Moon&#9;TypeID&#9;Quantity&#9;SolarSystemID&#9;PlanetID&#9;MoonID&#10;Jita IV - Moon 4&#9;45492&#9;0.300000&#9;30000142&#9;40000001&#9;40000004"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-upload me-1"></i>{% trans "Import" %}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card border-info mb-3">
+        <div class="card-header bg-info text-dark fw-bold">
+          <i class="fas fa-info-circle me-1"></i>{% trans "How to Export In-Game" %}
+        </div>
+        <div class="card-body small">
+          <ol class="ps-3 mb-0">
+            <li class="mb-2">{% trans "Anchor and online an Athanor or Metenox on the target moon." %}</li>
+            <li class="mb-2">{% trans "Open the Structure window and go to the Moon Drill tab." %}</li>
+            <li class="mb-2">{% trans "Start a moon probe scan and wait for results." %}</li>
+            <li class="mb-2">{% trans 'Click "Export" — this copies tab-separated data to your clipboard.' %}</li>
+            <li>{% trans "Paste here and click Import." %}</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="card border-secondary">
+        <div class="card-header fw-bold">
+          <i class="fas fa-cog me-1"></i>{% trans "What Happens on Import" %}
+        </div>
+        <div class="card-body small text-muted">
+          <ul class="ps-3 mb-0">
+            <li class="mb-1">{% trans "New moons are created automatically using ESI for name and location data." %}</li>
+            <li class="mb-1">{% trans "Existing moon ore compositions are overwritten with the pasted data." %}</li>
+            <li class="mb-1">{% trans "Ore fractions are normalised to sum to 1.0." %}</li>
+            <li>{% trans "Rarity class is inferred from the highest-tier ore found." %}</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock moonmaster_content %}

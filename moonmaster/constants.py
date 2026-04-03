@@ -94,3 +94,34 @@ FUEL_BLOCK_TYPE_IDS = [
     ESI_TYPE_ID_HELIUM_FUEL_BLOCK,
     ESI_TYPE_ID_OXYGEN_FUEL_BLOCK,
 ]
+
+# ---------------------------------------------------------------------------
+# Moon ore type_id → rarity class (for survey import auto-classification)
+# ---------------------------------------------------------------------------
+MOON_ORE_RARITY: dict = {
+    # R4 Ubiquitous
+    45490: RARITY_UBIQUITOUS,  # Zeolites
+    45491: RARITY_UBIQUITOUS,  # Sylvite
+    45492: RARITY_UBIQUITOUS,  # Bitumens
+    45493: RARITY_UBIQUITOUS,  # Coesite
+    # R8 Common
+    45494: RARITY_COMMON,  # Cobaltite
+    45495: RARITY_COMMON,  # Euxenite
+    45496: RARITY_COMMON,  # Titanite
+    45497: RARITY_COMMON,  # Scheelite
+    # R16 Uncommon
+    45498: RARITY_UNCOMMON,  # Otavite
+    45499: RARITY_UNCOMMON,  # Sperrylite
+    45500: RARITY_UNCOMMON,  # Vanadinite
+    45501: RARITY_UNCOMMON,  # Chromite
+    # R32 Rare
+    45502: RARITY_RARE,  # Carnotite
+    45503: RARITY_RARE,  # Zircon
+    45504: RARITY_RARE,  # Loparite
+    45505: RARITY_RARE,  # Monazite
+    # R64 Exceptional
+    45506: RARITY_EXCEPTIONAL,  # Xenotime
+    45507: RARITY_EXCEPTIONAL,  # Ytterbite
+    45508: RARITY_EXCEPTIONAL,  # Pollucite
+    45509: RARITY_EXCEPTIONAL,  # Cinnabar
+}

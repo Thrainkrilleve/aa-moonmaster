@@ -208,3 +208,77 @@ def get_or_create_moon(moon_id: int) -> Tuple:
 def structure_is_online(esi_state: str) -> bool:
     """Return whether an ESI structure state string represents an online structure."""
     return esi_state not in _OFFLINE_STATES
+
+
+# ---------------------------------------------------------------------------
+# Structure / moon position helpers  (require esi-universe.read_structures.v1)
+# ---------------------------------------------------------------------------
+
+SCOPE_UNIVERSE = "esi-universe.read_structures.v1"
+
+
+def get_structure_info(structure_id: int, token) -> Optional[dict]:
+    """
+    Return ESI structure detail dict (keys: solar_system_id, position {x,y,z})
+    for a player-owned structure.  Requires SCOPE_UNIVERSE on the token.
+    Returns None on any error.
+    """
+    try:
+        headers = {
+            "Authorization": f"Bearer {token.access_token}",
+            "Accept": "application/json",
+            "User-Agent": _USER_AGENT,
+        }
+        resp = requests.get(
+            f"{ESI_BASE}/universe/structures/{structure_id}/",
+            headers=headers,
+            params={"datasource": ESI_DATASOURCE},
+            timeout=ESI_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        logger.warning("get_structure_info(%d): %s", structure_id, exc)
+        return None
+
+
+def find_moon_for_position(
+    solar_system_id: int, sx: float, sy: float, sz: float
+) -> Optional[int]:
+    """
+    Return the moon_id in solar_system_id whose co-ordinates are closest to
+    (sx, sy, sz) using public ESI.  Structures are anchored at their moon so
+    the closest moon at distance near-zero is the correct match.
+    Returns None if no moons are found.
+    """
+    try:
+        sys_data = esi_public_get(f"/universe/systems/{solar_system_id}/")
+    except Exception as exc:
+        logger.warning("find_moon_for_position: system %d: %s", solar_system_id, exc)
+        return None
+
+    moon_ids: List[int] = []
+    for planet in sys_data.get("planets", []):
+        moon_ids.extend(planet.get("moons", []))
+
+    if not moon_ids:
+        return None
+
+    best_id: Optional[int] = None
+    best_dist_sq = float("inf")
+
+    for moon_id in moon_ids[:60]:  # cap to avoid overwhelming ESI in large systems
+        try:
+            moon_data = esi_public_get(f"/universe/moons/{moon_id}/")
+            pos = moon_data.get("position", {})
+            mx = float(pos.get("x", 0))
+            my = float(pos.get("y", 0))
+            mz = float(pos.get("z", 0))
+            dist_sq = (sx - mx) ** 2 + (sy - my) ** 2 + (sz - mz) ** 2
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
+                best_id = moon_id
+        except Exception:
+            continue
+
+    return best_id

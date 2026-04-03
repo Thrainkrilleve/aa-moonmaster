@@ -5,9 +5,16 @@
 <div class="container-fluid">
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h2><i class="fas fa-users-cog me-2"></i>{% trans "Manage Corp Owners" %}</h2>
-    <a href="{% url 'moonmaster:add_owner' %}" class="btn btn-success">
-      <i class="fas fa-plus me-1"></i>{% trans "Register Your Corporation" %}
-    </a>
+    <div class="d-flex gap-2">
+      <form method="post" action="{% url 'moonmaster:sync_all_now' %}">{% csrf_token %}
+        <button type="submit" class="btn btn-outline-success">
+          <i class="fas fa-sync me-1"></i>{% trans "Sync All" %}
+        </button>
+      </form>
+      <a href="{% url 'moonmaster:add_owner' %}" class="btn btn-success">
+        <i class="fas fa-plus me-1"></i>{% trans "Register Your Corporation" %}
+      </a>
+    </div>
   </div>
 
   {% if owners %}
@@ -21,7 +28,7 @@
               <th>{% trans "Active" %}</th>
               <th>{% trans "Last Sync" %}</th>
               <th>{% trans "Sync Error" %}</th>
-              <th></th>
+              <th class="text-end">{% trans "Actions" %}</th>
             </tr>
           </thead>
           <tbody>
@@ -65,12 +72,64 @@
                 {% endif %}
               </td>
               <td class="text-end">
-                <form method="post" action="{% url 'moonmaster:remove_owner' owner.pk %}"
-                      onsubmit="return confirm('{% trans "Remove this corporation from Moon Master?" %}')">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm btn-outline-danger">
-                    <i class="fas fa-trash-alt"></i>
+                <div class="d-flex gap-1 justify-content-end flex-nowrap">
+                  <button type="button" class="btn btn-sm btn-outline-info"
+                          data-bs-toggle="collapse"
+                          data-bs-target="#tax-{{ owner.pk }}"
+                          title="{% trans 'Edit Tax Config' %}">
+                    <i class="fas fa-sliders-h"></i>
                   </button>
+                  <form method="post" action="{% url 'moonmaster:sync_owner_now' owner.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-success" title="{% trans 'Sync Now' %}">
+                      <i class="fas fa-sync"></i>
+                    </button>
+                  </form>
+                  <form method="post" action="{% url 'moonmaster:remove_owner' owner.pk %}"
+                        onsubmit="return confirm('{% trans "Remove this corporation from Moon Master?" %}')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="{% trans 'Remove' %}">
+                      <i class="fas fa-trash-alt"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            <tr id="tax-{{ owner.pk }}" class="collapse">
+              <td colspan="6" class="bg-body-secondary p-3">
+                <form method="post" action="{% url 'moonmaster:update_tax_config' owner.pk %}">
+                  {% csrf_token %}
+                  <div class="row g-2 align-items-end">
+                    <div class="col-6 col-sm-3 col-lg-2">
+                      <label class="form-label small fw-semibold mb-1">{% trans "Alliance Tax (0–1)" %}</label>
+                      <input type="number" name="alliance_tax" step="0.001" min="0" max="1"
+                             value="{{ owner.tax_config.alliance_tax|default:0 }}"
+                             class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6 col-sm-3 col-lg-2">
+                      <label class="form-label small fw-semibold mb-1">{% trans "Corp Tax (0–1)" %}</label>
+                      <input type="number" name="corp_tax" step="0.001" min="0" max="1"
+                             value="{{ owner.tax_config.corp_tax|default:0 }}"
+                             class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6 col-sm-3 col-lg-2">
+                      <label class="form-label small fw-semibold mb-1">{% trans "Reprocess Tax (0–1)" %}</label>
+                      <input type="number" name="reprocess_tax" step="0.001" min="0" max="1"
+                             value="{{ owner.tax_config.reprocess_tax|default:0 }}"
+                             class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6 col-sm-3 col-lg-2">
+                      <label class="form-label small fw-semibold mb-1">{% trans "Sov Upkeep ISK/day" %}</label>
+                      <input type="number" name="sov_upkeep_daily_isk" step="1000" min="0"
+                             value="{{ owner.tax_config.sov_upkeep_daily_isk|default:0 }}"
+                             class="form-control form-control-sm">
+                    </div>
+                    <div class="col-auto">
+                      <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="fas fa-save me-1"></i>{% trans "Save" %}
+                      </button>
+                    </div>
+                  </div>
                 </form>
               </td>
             </tr>

@@ -164,6 +164,7 @@ def manage_owners(request):
 @token_required(scopes=[
     "esi-corporations.read_structures.v1",
     "esi-industry.read_corporation_mining.v1",
+    "esi-universe.read_structures.v1",
 ])
 def add_owner(request, token):
     """
@@ -217,3 +218,158 @@ def remove_owner(request, owner_id):
     owner.delete()
     messages.success(request, f"Removed {corp_name} from Moon Master.")
     return redirect("moonmaster:manage_owners")
+
+
+# ---------------------------------------------------------------------------
+# On-demand sync controls
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("moonmaster.manage_moons", raise_exception=True)
+@require_POST
+def sync_owner_now(request, owner_id):
+    """Queue an immediate ESI sync for a single StructureOwner."""
+    from .tasks import sync_owner
+    owner = get_object_or_404(StructureOwner, pk=owner_id)
+    sync_owner.delay(owner_id=owner.pk)
+    messages.success(request, f"Sync queued for {owner.corporation.corporation_name}.")
+    return redirect("moonmaster:manage_owners")
+
+
+@login_required
+@permission_required("moonmaster.manage_moons", raise_exception=True)
+@require_POST
+def sync_all_now(request):
+    """Queue a full sync for all active StructureOwners."""
+    from .tasks import update_all_structures, update_extractions
+    update_all_structures.delay()
+    update_extractions.delay()
+    messages.success(request, "Full sync queued for all active owners.")
+    return redirect("moonmaster:manage_owners")
+
+
+# ---------------------------------------------------------------------------
+# Tax configuration
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("moonmaster.manage_moons", raise_exception=True)
+@require_POST
+def update_tax_config(request, owner_id):
+    """Save TaxConfig fields for a StructureOwner."""
+    import decimal
+    owner = get_object_or_404(StructureOwner, pk=owner_id)
+    tax, _ = TaxConfig.objects.get_or_create(owner=owner)
+    try:
+        tax.alliance_tax = float(request.POST.get("alliance_tax", 0))
+        tax.corp_tax = float(request.POST.get("corp_tax", 0))
+        tax.reprocess_tax = float(request.POST.get("reprocess_tax", 0))
+        tax.sov_upkeep_daily_isk = decimal.Decimal(
+            request.POST.get("sov_upkeep_daily_isk", "0") or "0"
+        )
+        tax.full_clean()
+        tax.save()
+        messages.success(
+            request, f"Tax config saved for {owner.corporation.corporation_name}."
+        )
+    except Exception as exc:
+        messages.error(request, f"Could not save tax config: {exc}")
+    return redirect("moonmaster:manage_owners")
+
+
+# ---------------------------------------------------------------------------
+# Moon survey import
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("moonmaster.manage_moons", raise_exception=True)
+def import_survey(request):
+    """
+    Import moon probe-scanner export data (tab-separated from the in-game
+    Structure → Moon Survey → Export button).
+    """
+    if request.method == "POST":
+        raw = request.POST.get("scan_data", "").strip()
+        if not raw:
+            messages.warning(request, "No scan data provided.")
+            return redirect("moonmaster:import_survey")
+        result = _parse_and_import_survey(raw)
+        if result["created"] or result["updated"]:
+            messages.success(
+                request,
+                f"Import complete — {result['created']} moon(s) created, "
+                f"{result['updated']} updated.",
+            )
+        if result["errors"]:
+            messages.warning(
+                request,
+                f"{len(result['errors'])} line(s) skipped: "
+                + "; ".join(result["errors"][:5]),
+            )
+        return redirect("moonmaster:moon_list")
+    return render(request, "moonmaster/import_survey.html", {})
+
+
+def _parse_and_import_survey(raw: str) -> dict:
+    """
+    Parse an in-game moon probe scanner export and upsert Moon records.
+
+    Expected format (tab-separated with optional header row):
+      Moon  TypeID  Quantity  SolarSystemID  PlanetID  MoonID
+
+    Returns {'created': int, 'updated': int, 'errors': list[str]}.
+    """
+    from .providers import get_or_create_moon
+
+    created = updated = 0
+    errors: list = []
+    moon_rows: dict = {}
+
+    for lineno, line in enumerate(raw.splitlines(), 1):
+        line = line.strip()
+        if not line or line.lower().startswith("moon\t"):
+            continue
+        cols = line.split("\t")
+        if len(cols) < 6:
+            errors.append(f"Line {lineno}: expected 6 columns, got {len(cols)}")
+            continue
+        try:
+            moon_id = int(cols[5])
+            type_id = int(cols[1])
+            quantity = float(cols[2])
+        except (ValueError, IndexError) as exc:
+            errors.append(f"Line {lineno}: {exc}")
+            continue
+        if moon_id not in moon_rows:
+            moon_rows[moon_id] = {"composition": {}, "name": cols[0]}
+        moon_rows[moon_id]["composition"][str(type_id)] = quantity
+
+    for moon_id, data in moon_rows.items():
+        moon, was_created = get_or_create_moon(moon_id)
+        total = sum(data["composition"].values())
+        normed = (
+            {k: v / total for k, v in data["composition"].items()}
+            if total > 0
+            else data["composition"]
+        )
+        moon.ore_composition = normed
+        moon.rarity_class = _infer_rarity(normed)
+        moon.save(update_fields=["ore_composition", "rarity_class"])
+        if was_created:
+            created += 1
+        else:
+            updated += 1
+
+    return {"created": created, "updated": updated, "errors": errors}
+
+
+def _infer_rarity(composition: dict) -> str:
+    """Return the highest rarity class present in the ore composition."""
+    from .constants import MOON_ORE_RARITY, RARITY_UBIQUITOUS
+    _rank = {"ubiquitous": 0, "common": 1, "uncommon": 2, "rare": 3, "exceptional": 4}
+    best = RARITY_UBIQUITOUS
+    for type_id_str in composition:
+        rarity = MOON_ORE_RARITY.get(int(type_id_str))
+        if rarity and _rank.get(rarity, 0) > _rank.get(best, 0):
+            best = rarity
+    return best

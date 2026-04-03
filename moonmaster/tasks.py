@@ -142,8 +142,9 @@ def _sync_owner_structures(owner):
         fuel_str = s.get("fuel_expires")
         fuel_expires = parse_datetime(fuel_str) if fuel_str else None
         is_online = structure_is_online(s.get("state", ""))
+        system_id = s.get("system_id")
 
-        Structure.objects.update_or_create(
+        obj, _ = Structure.objects.update_or_create(
             structure_id=s["structure_id"],
             defaults={
                 "owner": owner,
@@ -153,6 +154,8 @@ def _sync_owner_structures(owner):
                 "fuel_expires": fuel_expires,
             },
         )
+        if obj.moon_id is None:
+            _try_link_structure_to_moon(obj, system_id, token)
         updated += 1
 
     logger.info("_sync_owner_structures: %s — updated %d structure(s).", owner, updated)
@@ -360,3 +363,78 @@ def _send_discord_alert(owner, message: str):
         resp.raise_for_status()
     except requests.RequestException as exc:
         logger.warning("Discord alert failed for owner %s: %s", owner, exc)
+
+
+# ---------------------------------------------------------------------------
+# Per-owner on-demand sync
+# ---------------------------------------------------------------------------
+
+@shared_task(bind=True, name="moonmaster.tasks.sync_owner")
+def sync_owner(self, owner_id: int):
+    """Sync structures and extractions for a single StructureOwner on demand."""
+    try:
+        from .models import StructureOwner
+        owner = StructureOwner.objects.get(pk=owner_id)
+        _sync_owner_structures(owner)
+        _sync_owner_extractions(owner)
+    except Exception as exc:
+        logger.exception("moonmaster.sync_owner(%d) failed: %s", owner_id, exc)
+        raise self.retry(exc=exc, countdown=30, max_retries=3)
+
+
+def _try_link_structure_to_moon(structure, system_id, token):
+    """
+    Attempt to discover which moon a Structure sits on, trying:
+      1. ESI /universe/structures/{id}/ (needs esi-universe.read_structures.v1)
+      2. Name-substring match against known Moon records (fallback)
+    Sets structure.moon and saves when a match is found.
+    """
+    from .providers import (
+        SCOPE_UNIVERSE,
+        get_valid_token,
+        refresh_token,
+        get_structure_info,
+        find_moon_for_position,
+        get_or_create_moon,
+    )
+    from .models import Moon
+
+    # --- Attempt 1: position-based lookup via universe scope ---
+    uni_token = get_valid_token(token.character_id, [SCOPE_UNIVERSE])
+    if uni_token and refresh_token(uni_token):
+        info = get_structure_info(structure.structure_id, uni_token)
+        if info:
+            ss_id = info.get("solar_system_id") or system_id
+            pos = info.get("position", {})
+            moon_id = find_moon_for_position(
+                ss_id,
+                float(pos.get("x", 0)),
+                float(pos.get("y", 0)),
+                float(pos.get("z", 0)),
+            )
+            if moon_id:
+                moon, _ = get_or_create_moon(moon_id)
+                structure.moon = moon
+                structure.save(update_fields=["moon"])
+                logger.info(
+                    "Linked structure %s → %s via position lookup",
+                    structure.structure_id, moon,
+                )
+                return
+
+    # --- Attempt 2: name-substring match against known Moon records ---
+    if structure.name:
+        for moon in Moon.objects.all():
+            if moon.name and moon.name in structure.name:
+                structure.moon = moon
+                structure.save(update_fields=["moon"])
+                logger.info(
+                    "Linked structure %s → %s via name heuristic",
+                    structure.structure_id, moon,
+                )
+                return
+
+    logger.debug(
+        "Could not link structure %s (id=%s) to any moon.",
+        structure, structure.structure_id,
+    )
