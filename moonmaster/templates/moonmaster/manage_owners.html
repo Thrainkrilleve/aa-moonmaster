@@ -12,7 +12,7 @@
         </button>
       </form>
       <a href="{% url 'moonmaster:add_owner' %}" class="btn btn-success">
-        <i class="fas fa-plus me-1"></i>{% trans "Register Your Corporation" %}
+        <i class="fas fa-plus me-1"></i>{% trans "Add Manager" %}
       </a>
     </div>
   </div>
@@ -24,7 +24,7 @@
           <thead class="table-dark">
             <tr>
               <th>{% trans "Corporation" %}</th>
-              <th>{% trans "ESI Character" %}</th>
+              <th>{% trans "Managers" %}</th>
               <th>{% trans "Active" %}</th>
               <th>{% trans "Last Sync" %}</th>
               <th>{% trans "Sync Error" %}</th>
@@ -40,13 +40,29 @@
                 {{ owner.corporation.corporation_name }}
               </td>
               <td>
-                {% if owner.character %}
-                  <img src="https://images.evetech.net/characters/{{ owner.character.character_id }}/portrait?size=32"
-                       class="rounded-circle me-1" alt="" width="32" height="32">
-                  {{ owner.character.character_name }}
-                {% else %}
-                  <span class="text-muted">{% trans "None" %}</span>
-                {% endif %}
+                {% with chars=owner.owner_characters.all %}
+                  {% if chars %}
+                    <div class="d-flex flex-column gap-1">
+                      {% for oc in chars %}
+                        <div class="d-flex align-items-center gap-1">
+                          <img src="https://images.evetech.net/characters/{{ oc.character.character_id }}/portrait?size=32"
+                               class="rounded-circle" alt="" width="32" height="32">
+                          <span>{{ oc.character.character_name }}</span>
+                          {% if oc.is_primary %}<span class="badge text-bg-primary ms-1" style="font-size:0.65rem;">{% trans "Primary" %}</span>{% endif %}
+                          <form method="post" action="{% url 'moonmaster:remove_owner_character' oc.pk %}"
+                                onsubmit="return confirm('{% trans "Remove this manager character?" %}')">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-xs btn-outline-danger py-0 px-1 ms-1" title="{% trans 'Remove character' %}" style="font-size:0.75rem;">
+                              <i class="fas fa-times"></i>
+                            </button>
+                          </form>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span class="text-muted small">{% trans "No managers — click Add Manager" %}</span>
+                  {% endif %}
+                {% endwith %}
               </td>
               <td>
                 {% if owner.is_active %}
@@ -141,7 +157,7 @@
   {% else %}
     <div class="alert alert-info">
       <i class="fas fa-info-circle me-2"></i>
-      {% trans "No corporations registered yet. Click \"Register Your Corporation\" to add one." %}
+      {% trans "No corporations registered yet. Click \"Add Manager\" to add one." %}
     </div>
   {% endif %}
 </div>

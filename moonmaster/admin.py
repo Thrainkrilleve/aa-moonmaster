@@ -6,6 +6,7 @@ from .models import (
     MiningLedgerEntry,
     Moon,
     OrePrice,
+    OwnerCharacter,
     Structure,
     StructureOwner,
     TaxConfig,
@@ -16,6 +17,13 @@ class TaxConfigInline(admin.StackedInline):
     model = TaxConfig
     extra = 0
     can_delete = False
+
+
+class OwnerCharacterInline(admin.TabularInline):
+    model = OwnerCharacter
+    extra = 1
+    fields = ("character", "is_primary", "added_at")
+    readonly_fields = ("added_at",)
 
 
 class StructureInline(admin.TabularInline):
@@ -29,7 +37,7 @@ class StructureInline(admin.TabularInline):
 class StructureOwnerAdmin(admin.ModelAdmin):
     list_display = ("corporation", "character", "is_active", "last_sync")
     list_filter = ("is_active",)
-    inlines = [TaxConfigInline, StructureInline]
+    inlines = [OwnerCharacterInline, TaxConfigInline, StructureInline]
     readonly_fields = ("last_sync", "sync_error")
 
 

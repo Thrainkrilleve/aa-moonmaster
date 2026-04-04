@@ -17,6 +17,7 @@ urlpatterns = [
     path("owners/add/", views.add_owner, name="add_owner"),
     path("owners/sync-all/", views.sync_all_now, name="sync_all_now"),
     path("owners/<int:owner_id>/remove/", views.remove_owner, name="remove_owner"),
+    path("owners/character/<int:pk>/remove/", views.remove_owner_character, name="remove_owner_character"),
     path("owners/<int:owner_id>/sync/", views.sync_owner_now, name="sync_owner_now"),
     path("owners/<int:owner_id>/tax/", views.update_tax_config, name="update_tax_config"),
     # Moon survey import

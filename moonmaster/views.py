@@ -13,7 +13,7 @@ from esi.decorators import token_required
 from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
 
 from .calculator import MoonProfitCalculator
-from .models import Extraction, Moon, Structure, StructureOwner, TaxConfig
+from .models import Extraction, Moon, OwnerCharacter, Structure, StructureOwner, TaxConfig
 from .constants import PRICE_SOURCE_ESI, STRUCTURE_TYPE_METENOX, STRUCTURE_TYPE_ATHANOR, REINFORCE_STATES
 
 
@@ -236,7 +236,9 @@ def refresh_prices_api(request):
 @permission_required("moonmaster.manage_moons", raise_exception=True)
 def manage_owners(request):
     owners = StructureOwner.objects.select_related(
-        "corporation", "character"
+        "corporation", "character",
+    ).prefetch_related(
+        "owner_characters__character",
     ).order_by("corporation__corporation_name")
     context = {"owners": owners}
     return render(request, "moonmaster/manage_owners.html", context)
@@ -277,15 +279,29 @@ def add_owner(request, token):
         defaults={"character": char, "is_active": True},
     )
     if not created:
-        # Update the registered character if a new person re-registered
-        owner.character = char
         owner.is_active = True
-        owner.save(update_fields=["character", "is_active"])
+        owner.save(update_fields=["is_active"])
+
+    # Register this character as a fallback manager
+    oc, oc_created = OwnerCharacter.objects.get_or_create(
+        owner=owner,
+        character=char,
+        defaults={"is_primary": not owner.owner_characters.filter(is_primary=True).exists()},
+    )
+    # Keep legacy character field pointing to the most recently used manager
+    if owner.character_id != char.pk:
+        owner.character = char
+        owner.save(update_fields=["character"])
 
     # Ensure a TaxConfig exists
     TaxConfig.objects.get_or_create(owner=owner)
 
-    action = "registered" if created else "updated"
+    if created:
+        action = "registered"
+    elif oc_created:
+        action = "updated — new manager character added"
+    else:
+        action = "already registered"
     messages.success(
         request,
         f"Corporation {corporation.corporation_name} {action} as a Moon Master owner.",
@@ -301,6 +317,26 @@ def remove_owner(request, owner_id):
     corp_name = str(owner.corporation.corporation_name)
     owner.delete()
     messages.success(request, f"Removed {corp_name} from Moon Master.")
+    return redirect("moonmaster:manage_owners")
+
+
+@login_required
+@permission_required("moonmaster.manage_moons", raise_exception=True)
+@require_POST
+def remove_owner_character(request, pk):
+    """Remove a single manager character from a corporation's fallback list."""
+    oc = get_object_or_404(OwnerCharacter, pk=pk)
+    corp_name = str(oc.owner.corporation.corporation_name)
+    char_name = str(oc.character.character_name)
+    removed_char_pk = oc.character_id
+    owner = oc.owner
+    oc.delete()
+    # Keep legacy character field consistent if we just removed the primary
+    if owner.character_id == removed_char_pk:
+        remaining = owner.owner_characters.select_related("character").first()
+        owner.character = remaining.character if remaining else None
+        owner.save(update_fields=["character"])
+    messages.success(request, f"Removed {char_name} as manager for {corp_name}.")
     return redirect("moonmaster:manage_owners")
 
 

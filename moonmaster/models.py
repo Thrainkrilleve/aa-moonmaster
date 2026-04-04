@@ -86,6 +86,65 @@ class StructureOwner(models.Model):
     def __str__(self):
         return f"{self.corporation.corporation_name}"
 
+    def get_token(self, scopes):
+        """
+        Return the first valid, refreshed ESI token from any registered
+        manager character.  Tries OwnerCharacter rows (primary first, then
+        oldest-added), then falls back to the legacy ``character`` field.
+        Returns None if no usable token is found.
+        """
+        from .providers import get_valid_token, refresh_token
+
+        for oc in self.owner_characters.order_by("-is_primary", "id").select_related("character"):
+            tok = get_valid_token(oc.character.character_id, scopes)
+            if tok and refresh_token(tok):
+                return tok
+
+        # Legacy fallback — keeps working if OwnerCharacter table is empty
+        if self.character_id:
+            tok = get_valid_token(self.character.character_id, scopes)
+            if tok and refresh_token(tok):
+                return tok
+
+        return None
+
+
+class OwnerCharacter(models.Model):
+    """
+    A manager character registered for a StructureOwner corporation.
+    Multiple characters can be registered per corporation so that ESI
+    calls can fall back to another manager's token if the primary is
+    expired or invalid.
+    """
+
+    owner = models.ForeignKey(
+        StructureOwner,
+        on_delete=models.CASCADE,
+        related_name="owner_characters",
+        verbose_name=_("Owner"),
+    )
+    character = models.ForeignKey(
+        EveCharacter,
+        on_delete=models.CASCADE,
+        related_name="+",
+        verbose_name=_("Character"),
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        verbose_name=_("Primary"),
+        help_text=_("Primary character — tried first on every sync."),
+    )
+    added_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Added"))
+
+    class Meta:
+        unique_together = [("owner", "character")]
+        ordering = ["-is_primary", "id"]
+        verbose_name = _("Owner Character")
+        verbose_name_plural = _("Owner Characters")
+
+    def __str__(self):
+        return f"{self.character.character_name} ({self.owner.corporation.corporation_name})"
+
 
 class Structure(models.Model):
     """An Athanor or Metenox structure anchored on a moon."""

@@ -93,28 +93,14 @@ def _sync_owner_structures(owner):
         METENOX_TYPE_ID,
         MOON_STRUCTURE_TYPE_IDS,
         SCOPE_STRUCTURES,
-        get_valid_token,
-        refresh_token,
         esi_authed_get,
         structure_is_online,
     )
 
-    if not owner.character:
-        logger.warning("StructureOwner %s has no ESI character set — skipping.", owner)
-        return
-
-    token = get_valid_token(owner.character.character_id, [SCOPE_STRUCTURES])
+    token = owner.get_token([SCOPE_STRUCTURES])
     if not token:
-        msg = f"No valid ESI token with scope {SCOPE_STRUCTURES} for {owner.character}."
-        logger.warning(msg)
-        owner.sync_error = msg
-        owner.last_sync = timezone.now()
-        owner.save(update_fields=["last_sync", "sync_error"])
-        return
-
-    if not refresh_token(token):
-        msg = f"Token for {owner.character} is expired/invalid."
-        logger.warning(msg)
+        msg = f"No valid ESI token with scope {SCOPE_STRUCTURES} for {owner}."
+        logger.warning("_sync_owner_structures: %s", msg)
         owner.sync_error = msg
         owner.last_sync = timezone.now()
         owner.save(update_fields=["last_sync", "sync_error"])
@@ -178,11 +164,11 @@ def _sync_owner_structures(owner):
             },
         )
         if obj.moon_id is None and structure_type in ("metenox", "athanor"):
-            _try_link_structure_to_moon(obj, system_id, token)
+            _try_link_structure_to_moon(obj, system_id, owner)
         updated += 1
 
     # Sync goo bay fill % for Metenox structures (requires assets scope)
-    _sync_metenox_bays(owner, token)
+    _sync_metenox_bays(owner)
 
     logger.info("_sync_owner_structures: %s — updated %d structure(s).", owner, updated)
     owner.last_sync = timezone.now()
@@ -218,28 +204,14 @@ def _sync_owner_extractions(owner):
     from .models import Extraction, Structure
     from .providers import (
         SCOPE_MINING,
-        get_valid_token,
-        refresh_token,
         esi_authed_get,
         get_or_create_moon,
     )
 
-    if not owner.character:
-        logger.warning("StructureOwner %s has no ESI character set — skipping.", owner)
-        return
-
-    token = get_valid_token(owner.character.character_id, [SCOPE_MINING])
+    token = owner.get_token([SCOPE_MINING])
     if not token:
-        msg = f"No valid ESI token with scope {SCOPE_MINING} for {owner.character}."
-        logger.warning(msg)
-        owner.sync_error = msg
-        owner.last_sync = timezone.now()
-        owner.save(update_fields=["last_sync", "sync_error"])
-        return
-
-    if not refresh_token(token):
-        msg = f"Token for {owner.character} is expired/invalid."
-        logger.warning(msg)
+        msg = f"No valid ESI token with scope {SCOPE_MINING} for {owner}."
+        logger.warning("_sync_owner_extractions: %s", msg)
         owner.sync_error = msg
         owner.last_sync = timezone.now()
         owner.save(update_fields=["last_sync", "sync_error"])
@@ -373,16 +345,11 @@ def _sync_owner_mining_ledger(owner):
     from .models import Extraction, MiningLedgerEntry, Structure
     from .providers import (
         SCOPE_MINING,
-        get_valid_token,
-        refresh_token,
         esi_authed_get,
     )
 
-    if not owner.character:
-        return
-
-    token = get_valid_token(owner.character.character_id, [SCOPE_MINING])
-    if not token or not refresh_token(token):
+    token = owner.get_token([SCOPE_MINING])
+    if not token:
         logger.warning("_sync_owner_mining_ledger: no valid mining token for %s.", owner)
         return
 
@@ -776,7 +743,7 @@ def sync_owner(self, owner_id: int):
         raise self.retry(exc=exc, countdown=30, max_retries=3)
 
 
-def _sync_metenox_bays(owner, structures_token):
+def _sync_metenox_bays(owner):
     """
     Fetch corporation assets, sum moon material volumes per Metenox structure,
     and update Structure.goo_bay_fill_pct.
@@ -788,13 +755,11 @@ def _sync_metenox_bays(owner, structures_token):
     from .models import Structure
     from .providers import (
         SCOPE_ASSETS,
-        get_valid_token,
-        refresh_token,
         esi_authed_get,
     )
 
-    assets_token = get_valid_token(owner.character.character_id, [SCOPE_ASSETS])
-    if not assets_token or not refresh_token(assets_token):
+    assets_token = owner.get_token([SCOPE_ASSETS])
+    if not assets_token:
         logger.debug("_sync_metenox_bays: no assets token for %s — skipping.", owner)
         return
 
@@ -831,27 +796,26 @@ def _sync_metenox_bays(owner, structures_token):
     logger.debug("_sync_metenox_bays: updated bay fill for %d Metenox(es) under %s.", len(metenox_sids), owner)
 
 
-def _try_link_structure_to_moon(structure, system_id, token):
+def _try_link_structure_to_moon(structure, system_id, owner):
     """
     Attempt to discover which moon a Structure sits on, trying:
       1. ESI /universe/structures/{id}/ (needs esi-universe.read_structures.v1)
-      2. Name-substring match against known Moon records (fallback)
+      2. Name-based planet/moon number lookup via public ESI
+      3. Name-substring match against known Moon records (fallback)
     Sets structure.moon and saves when a match is found.
     """
     from .providers import (
-        SCOPE_UNIVERSE,
-        get_valid_token,
-        refresh_token,
         get_structure_info,
         find_moon_for_position,
         find_moon_by_number,
         get_or_create_moon,
+        SCOPE_UNIVERSE,
     )
     from .models import Moon
 
     # --- Attempt 1: position-based lookup via universe scope ---
-    uni_token = get_valid_token(token.character_id, [SCOPE_UNIVERSE])
-    if uni_token and refresh_token(uni_token):
+    uni_token = owner.get_token([SCOPE_UNIVERSE])
+    if uni_token:
         info = get_structure_info(structure.structure_id, uni_token)
         if info:
             ss_id = info.get("solar_system_id") or system_id
