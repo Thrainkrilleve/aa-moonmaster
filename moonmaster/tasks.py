@@ -650,6 +650,115 @@ def process_survey(self, raw: str, user_id: int):
         raise self.retry(exc=exc, countdown=60, max_retries=2)
 
 
+@shared_task(bind=True, name="moonmaster.tasks.process_spreadsheet_survey")
+def process_spreadsheet_survey(self, raw: str, user_id: int):
+    """
+    Parse and import moon composition data from a spreadsheet/CSV export.
+
+    Expected format (tab-separated rows, one moon per row):
+      MoonID  [any cols]  OreName  OrePercent  OreName  OrePercent  ...
+
+    Ore names are matched case-insensitively against the known moon ore list.
+    Percentages may be "28.30%" or "0.2830" — both are accepted.
+    The MoonID must be in column 0. All other columns between and after
+    the moon ID are scanned for (OreName, OrePercent) pairs.
+    """
+    try:
+        from .providers import get_or_create_moon
+        from .constants import MOON_ORE_NAMES, MOON_ORE_RARITY, RARITY_UBIQUITOUS
+
+        ORE_NAME_TO_ID: dict = {v.lower(): k for k, v in MOON_ORE_NAMES.items()}
+        _rank = {"ubiquitous": 0, "common": 1, "uncommon": 2, "rare": 3, "exceptional": 4}
+
+        def _infer_rarity(composition):
+            best = RARITY_UBIQUITOUS
+            for tid_str in composition:
+                rarity = MOON_ORE_RARITY.get(int(tid_str))
+                if rarity and _rank.get(rarity, 0) > _rank.get(best, 0):
+                    best = rarity
+            return best
+
+        created = updated = 0
+        errors: list = []
+
+        for lineno, line in enumerate(raw.splitlines(), 1):
+            line = line.rstrip("\r")
+            if not line.strip():
+                continue
+            cols = line.split("\t")
+            if not cols:
+                continue
+
+            # Column 0 must be the numeric Moon ID
+            try:
+                moon_id = int(cols[0].strip().replace(",", ""))
+            except ValueError:
+                continue  # skip header rows
+
+            # Scan all columns for (OreName, OrePercent) pairs
+            comp: dict = {}
+            i = 1
+            while i < len(cols) - 1:
+                name_str = cols[i].strip().lower()
+                if name_str in ORE_NAME_TO_ID:
+                    try:
+                        pct_str = cols[i + 1].strip().rstrip("%")
+                        pct = float(pct_str)
+                        if pct > 1.5:          # value is a percentage like 28.30
+                            pct = pct / 100.0
+                        comp[str(ORE_NAME_TO_ID[name_str])] = pct
+                        i += 2
+                        continue
+                    except (ValueError, IndexError):
+                        pass
+                i += 1
+
+            if not comp:
+                errors.append(f"Line {lineno}: no recognised ore names found")
+                continue
+
+            # Normalise fractions to sum to 1.0
+            total = sum(comp.values())
+            if total > 0:
+                comp = {k: round(v / total, 6) for k, v in comp.items()}
+
+            moon, was_created = get_or_create_moon(moon_id)
+            moon.ore_composition = comp
+            moon.rarity_class = _infer_rarity(comp)
+            moon.save(update_fields=["ore_composition", "rarity_class"])
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+
+        try:
+            from django.contrib.auth.models import User
+            from allianceauth.notifications import notify
+
+            user = User.objects.get(pk=user_id)
+            error_summary = f" ({len(errors)} line(s) skipped)" if errors else ""
+            notify(
+                user=user,
+                title="Spreadsheet Survey Import Complete",
+                message=(
+                    f"Import finished: {created} moon(s) created, "
+                    f"{updated} updated{error_summary}."
+                ),
+                level="success" if not errors else "warning",
+            )
+        except Exception:
+            pass
+
+        logger.info(
+            "process_spreadsheet_survey: created=%d updated=%d errors=%d",
+            created, updated, len(errors),
+        )
+
+    except Exception as exc:
+        logger.exception("moonmaster.process_spreadsheet_survey failed: %s", exc)
+        raise self.retry(exc=exc, countdown=60, max_retries=2)
+
+
 # ---------------------------------------------------------------------------
 # Per-owner on-demand sync
 # ---------------------------------------------------------------------------

@@ -369,17 +369,22 @@ def update_tax_config(request, owner_id):
 @permission_required("moonmaster.manage_moons", raise_exception=True)
 def import_survey(request):
     """
-    Import moon probe-scanner export data (tab-separated from the in-game
-    Structure → Moon Survey → Export button).
-    Processing is dispatched to a Celery task to avoid gateway timeouts.
+    Import moon composition data.  Supports two formats:
+      1. In-game moon drill probe-scanner export (tab-separated, TypeID-based).
+      2. Spreadsheet export (tab-separated, ore-name + percentage columns).
     """
     if request.method == "POST":
+        import_type = request.POST.get("import_type", "scanner")
         raw = request.POST.get("scan_data", "").strip()
         if not raw:
             messages.warning(request, "No scan data provided.")
             return redirect("moonmaster:import_survey")
-        from .tasks import process_survey
-        process_survey.delay(raw, request.user.pk)
+        if import_type == "spreadsheet":
+            from .tasks import process_spreadsheet_survey
+            process_spreadsheet_survey.delay(raw, request.user.pk)
+        else:
+            from .tasks import process_survey
+            process_survey.delay(raw, request.user.pk)
         messages.success(
             request,
             "Survey submitted for processing — you'll receive a notification when it's done.",

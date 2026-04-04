@@ -10,66 +10,151 @@
     </a>
   </div>
 
-  <div class="row g-4">
-    <div class="col-lg-8">
-      <div class="card">
-        <div class="card-header fw-bold">
-          <i class="fas fa-paste me-1"></i>{% trans "Paste Moon Probe Scanner Export" %}
-        </div>
-        <div class="card-body">
-          <p class="text-muted small mb-3">
-            {% trans "Paste the tab-separated export from the in-game moon drill scanner. Include the header row — it will be ignored automatically." %}
-          </p>
-          <p class="text-muted small mb-2">
-            {% trans "Column layout (7 columns, tab-separated):" %}<br>
-            <code>Moon&nbsp;&nbsp;Moon&nbsp;Product&nbsp;&nbsp;Quantity&nbsp;&nbsp;Ore&nbsp;TypeID&nbsp;&nbsp;SolarSystemID&nbsp;&nbsp;PlanetID&nbsp;&nbsp;MoonID</code>
-          </p>
-          <form method="post">
-            {% csrf_token %}
-            <div class="mb-3">
-              <textarea name="scan_data"
-                        class="form-control font-monospace"
-                        rows="18"
-                        placeholder="Moon&#9;Moon Product&#9;Quantity&#9;Ore TypeID&#9;SolarSystemID&#9;PlanetID&#9;MoonID&#10;Jita IV - Moon 4&#9;&#9;&#9;&#9;&#9;&#9;&#10;&#9;Bitumens&#9;0.270000&#9;45492&#9;30000142&#9;40000001&#9;40000002&#10;&#9;Cobaltite&#9;0.330000&#9;45494&#9;30000142&#9;40000001&#9;40000002&#10;&#9;Carnotite&#9;0.200000&#9;45502&#9;30000142&#9;40000001&#9;40000002&#10;&#9;Xenotime&#9;0.200000&#9;45506&#9;30000142&#9;40000001&#9;40000002"></textarea>
+  <!-- Format tabs -->
+  <ul class="nav nav-tabs mb-3" id="importTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="scanner-tab" data-bs-toggle="tab"
+              data-bs-target="#scanner-pane" type="button" role="tab">
+        <i class="fas fa-satellite-dish me-1"></i>{% trans "In-Game Scanner Export" %}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="spreadsheet-tab" data-bs-toggle="tab"
+              data-bs-target="#spreadsheet-pane" type="button" role="tab">
+        <i class="fas fa-table me-1"></i>{% trans "Spreadsheet / CSV Import" %}
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="importTabContent">
+
+    <!-- Tab 1: In-game scanner format -->
+    <div class="tab-pane fade show active" id="scanner-pane" role="tabpanel">
+      <div class="row g-4">
+        <div class="col-lg-8">
+          <div class="card">
+            <div class="card-header fw-bold">
+              <i class="fas fa-paste me-1"></i>{% trans "Paste Moon Probe Scanner Export" %}
             </div>
-            <button type="submit" class="btn btn-primary">
-              <i class="fas fa-upload me-1"></i>{% trans "Import" %}
-            </button>
-          </form>
+            <div class="card-body">
+              <p class="text-muted small mb-3">
+                {% trans "Paste the tab-separated export from the in-game moon drill scanner. Include the header row — it will be ignored automatically." %}
+              </p>
+              <p class="text-muted small mb-2">
+                {% trans "Column layout (7 columns, tab-separated):" %}<br>
+                <code>Moon&nbsp;&nbsp;Moon&nbsp;Product&nbsp;&nbsp;Quantity&nbsp;&nbsp;Ore&nbsp;TypeID&nbsp;&nbsp;SolarSystemID&nbsp;&nbsp;PlanetID&nbsp;&nbsp;MoonID</code>
+              </p>
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="import_type" value="scanner">
+                <div class="mb-3">
+                  <textarea name="scan_data"
+                            class="form-control font-monospace"
+                            rows="18"
+                            placeholder="Moon&#9;Moon Product&#9;Quantity&#9;Ore TypeID&#9;SolarSystemID&#9;PlanetID&#9;MoonID&#10;Jita IV - Moon 4&#9;&#9;&#9;&#9;&#9;&#9;&#10;&#9;Bitumens&#9;0.270000&#9;45492&#9;30000142&#9;40000001&#9;40000002&#10;&#9;Cobaltite&#9;0.330000&#9;45494&#9;30000142&#9;40000001&#9;40000002"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                  <i class="fas fa-upload me-1"></i>{% trans "Import" %}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card border-info mb-3">
+            <div class="card-header bg-info text-dark fw-bold">
+              <i class="fas fa-info-circle me-1"></i>{% trans "How to Export In-Game" %}
+            </div>
+            <div class="card-body small">
+              <ol class="ps-3 mb-0">
+                <li class="mb-2">{% trans "Anchor and online an Athanor or Metenox on the target moon." %}</li>
+                <li class="mb-2">{% trans "Open the Structure window and go to the Moon Drill tab." %}</li>
+                <li class="mb-2">{% trans "Start a moon probe drill scan and wait for results (~1 hour)." %}</li>
+                <li class="mb-2">{% trans 'Click the clipboard icon (Export) next to the scan results.' %}</li>
+                <li>{% trans "Paste here and click Import." %}</li>
+              </ol>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="col-lg-4">
-      <div class="card border-info mb-3">
-        <div class="card-header bg-info text-dark fw-bold">
-          <i class="fas fa-info-circle me-1"></i>{% trans "How to Export In-Game" %}
+    <!-- Tab 2: Spreadsheet / external source format -->
+    <div class="tab-pane fade" id="spreadsheet-pane" role="tabpanel">
+      <div class="row g-4">
+        <div class="col-lg-8">
+          <div class="card">
+            <div class="card-header fw-bold">
+              <i class="fas fa-table me-1"></i>{% trans "Paste Spreadsheet Moon Data" %}
+            </div>
+            <div class="card-body">
+              <p class="text-muted small mb-3">
+                {% trans "Paste tab-separated data exported from a spreadsheet or external moon database tool. Each row should have one moon. The Moon ID must be the first column; ore name and percentage columns can appear anywhere after it." %}
+              </p>
+              <p class="text-muted small mb-2">
+                {% trans "Expected column layout (extra columns such as moon name, system, region are ignored):" %}<br>
+                <code>MoonID&nbsp;&nbsp;[any&nbsp;cols]&nbsp;&nbsp;OreName&nbsp;&nbsp;Ore%&nbsp;&nbsp;OreName&nbsp;&nbsp;Ore%&nbsp;&nbsp;...</code>
+              </p>
+              <p class="text-muted small mb-2">
+                {% trans "Percentage values may be expressed as" %} <code>28.30%</code> {% trans "or" %} <code>0.2830</code>.
+                {% trans "Header rows are skipped automatically." %}
+              </p>
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="import_type" value="spreadsheet">
+                <div class="mb-3">
+                  <textarea name="scan_data"
+                            class="form-control font-monospace"
+                            rows="18"
+                            placeholder="40298306&#9;NOL-M9 VIII - Moon 7&#9;NOL-M9&#9;B4H-9W&#9;Delve&#9;16&#9;Zeolites&#9;28.30%&#9;Cobaltite&#9;10.15%&#9;Bitumens&#9;33.01%&#9;Sperrylite&#9;28.54%&#10;40299135&#9;IP6V-X V - Moon 1&#9;IP6V-X&#9;O5K-Y6&#9;Delve&#9;16&#9;Bitumens&#9;31.37%&#9;Otavite&#9;33.37%&#9;Cobaltite&#9;10.95%&#9;Coesite&#9;24.30%"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                  <i class="fas fa-upload me-1"></i>{% trans "Import" %}
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
-        <div class="card-body small">
-          <ol class="ps-3 mb-0">
-            <li class="mb-2">{% trans "Anchor and online an Athanor or Metenox on the target moon." %}</li>
-            <li class="mb-2">{% trans "Open the Structure window and go to the Moon Drill tab." %}</li>
-            <li class="mb-2">{% trans "Start a moon probe drill scan and wait for results (~1 hour)." %}</li>
-            <li class="mb-2">{% trans 'Click the clipboard icon (Export) next to the scan results — this copies tab-separated data to your clipboard.' %}</li>
-            <li>{% trans "Paste here and click Import." %}</li>
-          </ol>
-        </div>
-      </div>
-
-      <div class="card border-secondary">
-        <div class="card-header fw-bold">
-          <i class="fas fa-cog me-1"></i>{% trans "What Happens on Import" %}
-        </div>
-        <div class="card-body small text-muted">
-          <ul class="ps-3 mb-0">
-            <li class="mb-1">{% trans "New moons are created automatically using ESI for name and location data." %}</li>
-            <li class="mb-1">{% trans "Existing moon ore compositions are overwritten with the pasted data." %}</li>
-            <li class="mb-1">{% trans "Ore fractions are normalised to sum to 1.0." %}</li>
-            <li>{% trans "Rarity class is inferred from the highest-tier ore found." %}</li>
-          </ul>
+        <div class="col-lg-4">
+          <div class="card border-success mb-3">
+            <div class="card-header bg-success text-white fw-bold">
+              <i class="fas fa-check-circle me-1"></i>{% trans "Recognised Ore Names" %}
+            </div>
+            <div class="card-body small">
+              <p class="text-muted mb-2">{% trans "The following ore names are recognised (case-insensitive):" %}</p>
+              <div class="row">
+                <div class="col-6">
+                  <strong class="text-muted d-block mb-1">R4 Ubiquitous</strong>
+                  Zeolites, Sylvite,<br>Bitumens, Coesite
+                  <strong class="text-muted d-block mt-2 mb-1">R8 Common</strong>
+                  Cobaltite, Euxenite,<br>Titanite, Scheelite
+                </div>
+                <div class="col-6">
+                  <strong class="text-muted d-block mb-1">R16 Uncommon</strong>
+                  Otavite, Sperrylite,<br>Vanadinite, Chromite
+                  <strong class="text-muted d-block mt-2 mb-1">R32/R64</strong>
+                  Carnotite, Zircon,<br>Loparite, Monazite,<br>Xenotime, Ytterbite,<br>Pollucite, Cinnabar
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card border-secondary">
+            <div class="card-header fw-bold">
+              <i class="fas fa-cog me-1"></i>{% trans "What Happens on Import" %}
+            </div>
+            <div class="card-body small text-muted">
+              <ul class="ps-3 mb-0">
+                <li class="mb-1">{% trans "New moons are created automatically using ESI for name and location data." %}</li>
+                <li class="mb-1">{% trans "Existing moon ore compositions are overwritten." %}</li>
+                <li class="mb-1">{% trans "Ore fractions are normalised to sum to 1.0." %}</li>
+                <li>{% trans "Rarity class is inferred from the highest-tier ore found." %}</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
   </div>
 </div>
 {% endblock moonmaster_content %}
