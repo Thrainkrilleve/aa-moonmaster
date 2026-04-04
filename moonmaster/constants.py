@@ -39,10 +39,12 @@ MOONMINING_DAYS_PER_MONTH = 30.4
 
 PRICE_SOURCE_ESI = "esi"
 PRICE_SOURCE_FUZZWORK = "fuzzwork"
+PRICE_SOURCE_JANICE = "janice"
 
 PRICE_SOURCE_CHOICES = [
     (PRICE_SOURCE_ESI, "ESI Average Price"),
     (PRICE_SOURCE_FUZZWORK, "Fuzzwork Buy/Sell"),
+    (PRICE_SOURCE_JANICE, "Janice Jita Buy (top-5%)"),
 ]
 
 # ---------------------------------------------------------------------------

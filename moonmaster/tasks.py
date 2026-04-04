@@ -27,10 +27,16 @@ def update_prices(self):
     """
     Refresh OrePrice table for all ore types present in Moon compositions
     plus the Metenox fuel types.
+
+    Price source is chosen automatically:
+      1. Janice   — if ``MOONMASTER_JANICE_API_KEY`` is set in Django settings
+      2. Fuzzwork — fallback when no Janice key is configured
     """
     try:
+        from django.conf import settings
         from .models import Moon, OrePrice
         from .constants import (
+            PRICE_SOURCE_JANICE,
             PRICE_SOURCE_FUZZWORK,
             ESI_TYPE_ID_NITROGEN_FUEL_BLOCK,
             ESI_TYPE_ID_HYDROGEN_FUEL_BLOCK,
@@ -54,8 +60,14 @@ def update_prices(self):
             ESI_TYPE_ID_MAGMATIC_GAS,
         ])
 
-        updated = update_all_prices(list(type_id_set), source=PRICE_SOURCE_FUZZWORK)
-        logger.info("moonmaster.update_prices: updated %d price records.", updated)
+        # Auto-select Janice when an API key is configured; otherwise Fuzzwork
+        if getattr(settings, "MOONMASTER_JANICE_API_KEY", ""):
+            source = PRICE_SOURCE_JANICE
+        else:
+            source = PRICE_SOURCE_FUZZWORK
+
+        updated = update_all_prices(list(type_id_set), source=source)
+        logger.info("moonmaster.update_prices: updated %d price records from %s.", updated, source)
     except Exception as exc:
         logger.exception("moonmaster.update_prices failed: %s", exc)
         raise self.retry(exc=exc, countdown=300, max_retries=3)

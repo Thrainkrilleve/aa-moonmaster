@@ -1,12 +1,17 @@
 """
 Pricing service for Moon Master.
 
-Supports two price sources:
-  - ESI  : /markets/prices/ — adjusted price (same source the game uses)
+Supports three price sources:
+  - ESI      : /markets/prices/ — adjusted price (same source the game uses)
   - Fuzzwork : https://market.fuzzwork.co.uk/aggregates/ — buy/sell per type_id
+  - Janice   : https://janice.e-351.com/api/rest/v2/pricer — Jita buy top-5%
 
 Call ``update_all_prices(type_ids, source)`` to refresh the OrePrice table.
 Call ``get_prices(type_ids)`` to retrieve a {type_id: Decimal} mapping from cache.
+
+To enable Janice add ``MOONMASTER_JANICE_API_KEY = "<your-key>"`` to your
+Django ``local.py``.  When that setting is present the periodic price task
+will automatically use Janice instead of Fuzzwork.
 """
 
 import logging
@@ -15,7 +20,7 @@ from typing import Dict, Iterable, List
 
 import requests
 
-from .constants import PRICE_SOURCE_ESI, PRICE_SOURCE_FUZZWORK
+from .constants import PRICE_SOURCE_ESI, PRICE_SOURCE_FUZZWORK, PRICE_SOURCE_JANICE
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +59,48 @@ def _fetch_esi_type_name(type_id: int) -> str:
         return resp.json().get("name", "")
     except Exception:  # noqa: BLE001
         return ""
+
+
+# ---------------------------------------------------------------------------
+# Janice
+# ---------------------------------------------------------------------------
+
+JANICE_PRICER_URL = "https://janice.e-351.com/api/rest/v2/pricer"
+# Jita market id in Janice
+JANICE_JITA_MARKET_ID = 2
+
+
+def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Decimal]:
+    """
+    Return a {type_id: buy_price} dict from Janice's bulk pricer endpoint.
+    Uses the top-5% average buy price at Jita (most stable valuation).
+    Raises requests.RequestException on failure.
+    """
+    body = "\n".join(str(tid) for tid in type_ids)
+    headers = {
+        "X-ApiKey": api_key,
+        "Content-Type": "text/plain",
+        "Accept": "application/json",
+    }
+    params = {"market": JANICE_JITA_MARKET_ID}
+    resp = requests.post(
+        JANICE_PRICER_URL, data=body.encode(), headers=headers, params=params, timeout=_TIMEOUT
+    )
+    resp.raise_for_status()
+    result: Dict[int, Decimal] = {}
+    for item in resp.json():
+        try:
+            type_id = int(item["itemType"]["eid"])
+            # Prefer top-5% average buy price; fall back to immediate buy price
+            price = (
+                item.get("top5AveragePrices", {}).get("buyPrice")
+                or item.get("immediatePrices", {}).get("buyPrice")
+                or 0
+            )
+            result[type_id] = Decimal(str(price))
+        except (KeyError, TypeError, ValueError):
+            pass
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +145,18 @@ def update_all_prices(type_ids: List[int], source: str = PRICE_SOURCE_ESI) -> in
     # Import here to avoid circular imports at module load time
     from .models import OrePrice  # noqa: PLC0415
 
-    if source == PRICE_SOURCE_FUZZWORK:
+    if source == PRICE_SOURCE_JANICE:
+        from django.conf import settings
+        api_key = getattr(settings, "MOONMASTER_JANICE_API_KEY", "")
+        if not api_key:
+            logger.error("Janice price source selected but MOONMASTER_JANICE_API_KEY is not set.")
+            return 0
+        try:
+            prices = _fetch_janice_prices(type_ids, api_key)
+        except requests.RequestException as exc:
+            logger.error("Janice price fetch failed: %s", exc)
+            return 0
+    elif source == PRICE_SOURCE_FUZZWORK:
         try:
             prices = _fetch_fuzzwork_prices(type_ids)
         except requests.RequestException as exc:
