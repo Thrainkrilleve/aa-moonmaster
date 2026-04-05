@@ -20,9 +20,24 @@ from typing import Dict, Iterable, List
 
 import requests
 
-from .constants import PRICE_SOURCE_ESI, PRICE_SOURCE_FUZZWORK, PRICE_SOURCE_JANICE
+from .constants import (
+    MOON_ORE_NAMES,
+    PRICE_SOURCE_ESI,
+    PRICE_SOURCE_FUZZWORK,
+    PRICE_SOURCE_JANICE,
+)
 
 logger = logging.getLogger(__name__)
+
+# Names for fuel/gas types that Janice knows by their common market names.
+# Moon ore names come from MOON_ORE_NAMES in constants.
+_FUEL_NAMES: Dict[int, str] = {
+    4051:  "Nitrogen Fuel Block",
+    4246:  "Hydrogen Fuel Block",
+    4247:  "Helium Fuel Block",
+    4312:  "Oxygen Fuel Block",
+    81143: "Magmatic Gas",
+}
 
 # ---------------------------------------------------------------------------
 # ESI
@@ -74,9 +89,31 @@ def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Dec
     """
     Return a {type_id: buy_price} dict from Janice's bulk pricer endpoint.
     Uses the top-5% average buy price at Jita (most stable valuation).
+
+    Janice does NOT index moon ores by the same type IDs used in the EVE SDE
+    (e.g. 45509 resolves to a ship SKIN in Janice's DB, not Cinnabar).  To
+    avoid this, we send item *names* instead of IDs and match the response
+    back using the returned ``itemType.name`` field.  Any type_id whose name
+    we don't know is silently skipped.
+
     Raises requests.RequestException on failure.
     """
-    body = "\n".join(str(tid) for tid in type_ids)
+    # Build a combined id→name map (moon ores + fuel/gas)
+    id_to_name: Dict[int, str] = {**MOON_ORE_NAMES, **_FUEL_NAMES}
+
+    # Only query items whose names we know; map name→id for response matching
+    name_to_id: Dict[str, int] = {}
+    lines: List[str] = []
+    for tid in type_ids:
+        name = id_to_name.get(tid)
+        if name:
+            lines.append(name)
+            name_to_id[name.lower()] = tid
+
+    if not lines:
+        return {}
+
+    body = "\n".join(lines)
     headers = {
         "X-ApiKey": api_key,
         "Content-Type": "text/plain",
@@ -90,11 +127,15 @@ def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Dec
     result: Dict[int, Decimal] = {}
     for item in resp.json():
         try:
-            type_id = int(item["itemType"]["eid"])
+            returned_name = (item.get("itemType") or {}).get("name", "")
+            type_id = name_to_id.get(returned_name.lower())
+            if type_id is None:
+                logger.debug("Janice returned unknown item name %r — skipped.", returned_name)
+                continue
             # Prefer top-5% average buy price; fall back to immediate buy price
             price = (
-                item.get("top5AveragePrices", {}).get("buyPrice")
-                or item.get("immediatePrices", {}).get("buyPrice")
+                (item.get("top5AveragePrices") or {}).get("buyPrice")
+                or (item.get("immediatePrices") or {}).get("buyPrice")
                 or 0
             )
             result[type_id] = Decimal(str(price))
