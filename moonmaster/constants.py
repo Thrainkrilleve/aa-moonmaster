@@ -135,8 +135,12 @@ SERVICE_MODULE_FUEL_PER_HOUR: dict = {
 
 # ---------------------------------------------------------------------------
 # Moon ore packaged volume (m³/unit) — used to convert ISK/unit → ISK/m³
-# Source: EVE SDE (eveuniverse EveType.volume).  All moon ores are 10.0 m³/unit.
-# Compressed variants are 0.1 m³/unit but those are never in moon compositions.
+#
+# These three dicts (MOON_ORE_VOLUME_M3, MOON_ORE_NAMES, MOON_ORE_RARITY) are
+# populated from django-eveonline-sde at startup in MoonMasterConfig.ready().
+# The values below are hardcoded fallbacks used when the SDE table is empty
+# (e.g. a fresh install before 'manage.py esde_load_sde' has been run).
+# All uncompressed moon ores are 10.0 m³/unit per the EVE SDE.
 # ---------------------------------------------------------------------------
 MOON_ORE_VOLUME_M3: dict = {
     # R4 Ubiquitous
@@ -169,7 +173,7 @@ MOON_ORE_VOLUME_M3: dict = {
 MOON_ORE_VOLUME_DEFAULT_M3 = 10.0
 
 # ---------------------------------------------------------------------------
-# Moon ore type_id → human-readable name
+# Moon ore type_id → human-readable name  (SDE-backed; see note above)
 # ---------------------------------------------------------------------------
 MOON_ORE_NAMES: dict = {
     # R4 Ubiquitous
@@ -200,7 +204,7 @@ MOON_ORE_NAMES: dict = {
 }
 
 # ---------------------------------------------------------------------------
-# Moon ore type_id → rarity class (for survey import auto-classification)
+# Moon ore type_id → rarity class  (SDE-backed; see note above)
 # ---------------------------------------------------------------------------
 MOON_ORE_RARITY: dict = {
     # R4 Ubiquitous

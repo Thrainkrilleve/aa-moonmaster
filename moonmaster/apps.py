@@ -12,8 +12,31 @@ class MoonMasterConfig(AppConfig):
         # menu_item_hook / url_hook are registered with AllianceAuth.
         from . import hooks  # noqa: F401
 
+        # Populate moon ore lookup dicts from django-eveonline-sde.
+        # Falls back silently to the hardcoded values in constants.py when
+        # the SDE table is not yet populated (e.g. during initial migration).
+        self._populate_ore_tables()
+
         # Register periodic Celery Beat tasks.
         self._register_celery_schedules()
+
+    @staticmethod
+    def _populate_ore_tables():
+        """Update the live moon-ore dicts in constants.py from the SDE."""
+        try:
+            from .sde import build_moon_ore_tables
+            import moonmaster.constants as _c
+
+            names, rarity, volumes = build_moon_ore_tables()
+            if names:
+                _c.MOON_ORE_NAMES.clear()
+                _c.MOON_ORE_NAMES.update(names)
+                _c.MOON_ORE_RARITY.clear()
+                _c.MOON_ORE_RARITY.update(rarity)
+                _c.MOON_ORE_VOLUME_M3.clear()
+                _c.MOON_ORE_VOLUME_M3.update(volumes)
+        except Exception:  # noqa: BLE001
+            pass  # hardcoded fallback values remain
 
     @staticmethod
     def _register_celery_schedules():

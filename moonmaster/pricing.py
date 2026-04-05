@@ -29,9 +29,11 @@ from .constants import (
 
 logger = logging.getLogger(__name__)
 
-# Names for fuel/gas types that Janice knows by their common market names.
-# Moon ore names come from MOON_ORE_NAMES in constants.
-_FUEL_NAMES: Dict[int, str] = {
+# Names for fuel/gas types used by Janice's name-based lookup.
+# MOON_ORE_NAMES is populated from django-eveonline-sde at startup; fuel names
+# below are stable and kept as a hardcoded fallback (SDE also queried at call
+# time via get_item_names() so any rename is picked up automatically).
+_FUEL_NAMES_FALLBACK: Dict[int, str] = {
     4051:  "Nitrogen Fuel Block",
     4246:  "Hydrogen Fuel Block",
     4247:  "Helium Fuel Block",
@@ -98,8 +100,13 @@ def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Dec
 
     Raises requests.RequestException on failure.
     """
-    # Build a combined id→name map (moon ores + fuel/gas)
-    id_to_name: Dict[int, str] = {**MOON_ORE_NAMES, **_FUEL_NAMES}
+    # Build a combined id→name map: moon ores (SDE-backed) + fuel/gas.
+    # Try the SDE first for fuel names so any future CCP rename is picked up;
+    # fall back to the hardcoded dict if the SDE is unavailable.
+    from .sde import get_item_names as _sde_names  # noqa: PLC0415
+    fuel_ids = [tid for tid in type_ids if tid not in MOON_ORE_NAMES]
+    sde_fuel = _sde_names(fuel_ids) if fuel_ids else {}
+    id_to_name: Dict[int, str] = {**MOON_ORE_NAMES, **_FUEL_NAMES_FALLBACK, **sde_fuel}
 
     # Only query items whose names we know; map name→id for response matching
     name_to_id: Dict[str, int] = {}
