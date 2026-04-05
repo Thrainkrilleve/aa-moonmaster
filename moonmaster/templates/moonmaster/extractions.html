@@ -5,6 +5,37 @@
 <div class="container-fluid">
   <h2><i class="fas fa-clock me-2"></i>{% trans "Extractions" %}</h2>
 
+  {# ── Owner sync status ── #}
+  {% for owner in owners %}
+    {% if owner.sync_error %}
+    <div class="alert alert-warning d-flex align-items-center gap-2 mb-2 py-2" role="alert">
+      <i class="fas fa-exclamation-triangle"></i>
+      <span>
+        <strong>{{ owner.corporation.corporation_name }}</strong> —
+        {% trans "ESI sync error:" %} {{ owner.sync_error }}
+      </span>
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  {# ── Filter tabs ── #}
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+      <a class="nav-link {% if status_filter == 'active' %}active{% endif %}"
+         href="?filter=active">
+        {% trans "Active" %}
+        <span class="badge bg-{% if active_count %}primary{% else %}secondary{% endif %} ms-1">{{ active_count }}</span>
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if status_filter == 'all' %}active{% endif %}"
+         href="?filter=all">
+        {% trans "All" %}
+        <span class="badge bg-secondary ms-1">{{ total_count }}</span>
+      </a>
+    </li>
+  </ul>
+
   <div class="card">
     <div class="card-body p-0">
       <table class="table table-hover mb-0">
@@ -13,6 +44,7 @@
             <th>{% trans "Moon" %}</th>
             <th>{% trans "Structure" %}</th>
             <th>{% trans "Owner" %}</th>
+            <th>{% trans "Start Time" %}</th>
             <th>{% trans "Chunk Arrival" %}</th>
             <th>{% trans "Auto-Fire" %}</th>
             <th>{% trans "Status" %}</th>
@@ -31,6 +63,7 @@
             </td>
             <td>{{ ext.structure.name|default:ext.structure.structure_id }}</td>
             <td>{{ ext.structure.owner.corporation.corporation_name }}</td>
+            <td>{{ ext.extraction_start_time|date:"Y-m-d H:i" }}</td>
             <td>{{ ext.chunk_arrival_time|date:"Y-m-d H:i" }}</td>
             <td>{{ ext.natural_decay_time|date:"Y-m-d H:i" }}</td>
             <td>
@@ -45,11 +78,49 @@
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="7" class="text-muted text-center py-4">{% trans "No extractions recorded." %}</td></tr>
+          <tr>
+            <td colspan="8" class="text-center py-4">
+              {% if status_filter == 'active' %}
+                <p class="text-muted mb-1">{% trans "No active drill cycles right now." %}</p>
+                {% if total_count %}
+                <p class="text-muted small mb-2">
+                  {% blocktrans with n=total_count %}{{ n }} historical extraction(s) on record.{% endblocktrans %}
+                  <a href="?filter=all">{% trans "View all" %}</a>
+                </p>
+                {% endif %}
+                {# Show last sync time per owner #}
+                {% for owner in owners %}
+                  {% if owner.last_sync %}
+                  <p class="text-muted small mb-0">
+                    <i class="fas fa-sync-alt me-1"></i>
+                    {{ owner.corporation.corporation_name }} —
+                    {% trans "last synced" %} {{ owner.last_sync|date:"Y-m-d H:i" }} UTC
+                  </p>
+                  {% endif %}
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">{% trans "No extractions on record." %}</span>
+              {% endif %}
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    {# ── Footer: last sync info when results are shown ── #}
+    {% if extractions %}
+    <div class="card-footer text-muted small d-flex flex-wrap gap-3">
+      {% for owner in owners %}
+        {% if owner.last_sync %}
+        <span>
+          <i class="fas fa-sync-alt me-1"></i>
+          {{ owner.corporation.corporation_name }}:
+          {% trans "synced" %} {{ owner.last_sync|date:"Y-m-d H:i" }} UTC
+        </span>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

@@ -150,10 +150,30 @@ def moon_detail(request, moon_id):
 @login_required
 @permission_required("moonmaster.basic_access", raise_exception=True)
 def extractions(request):
+    status_filter = request.GET.get("filter", "active")
+
     qs = Extraction.objects.select_related(
         "structure__moon", "structure__owner__corporation"
     ).order_by("-chunk_arrival_time")
-    context = {"extractions": qs[:200]}
+
+    if status_filter == "active":
+        qs = qs.filter(status__in=[Extraction.Status.SCHEDULED, Extraction.Status.READY])
+
+    owners = StructureOwner.objects.select_related("corporation").order_by(
+        "corporation__corporation_name"
+    )
+    total_count = Extraction.objects.count()
+    active_count = Extraction.objects.filter(
+        status__in=[Extraction.Status.SCHEDULED, Extraction.Status.READY]
+    ).count()
+
+    context = {
+        "extractions": qs[:200],
+        "owners": owners,
+        "status_filter": status_filter,
+        "total_count": total_count,
+        "active_count": active_count,
+    }
     return render(request, "moonmaster/extractions.html", context)
 
 
