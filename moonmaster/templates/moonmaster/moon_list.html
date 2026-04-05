@@ -147,7 +147,7 @@
 
   let activeRarity = 'all';
   let activeStructure = 'all';
-  let minNet = 0;
+  let minNet = null;   // null = no threshold; only filter when user enters a value
   let searchText = '';
   let sortCol = 5;        // default: Metenox Net/mo descending (already sorted server-side)
   let sortDir = -1;       // -1 = desc, 1 = asc
@@ -175,7 +175,7 @@
         (activeStructure === 'athanor' && hasAthanor) ||
         (activeStructure === 'metenox' && hasMetenox) ||
         (activeStructure === 'none' && !hasAthanor && !hasMetenox);
-      const valueOk = metenoxNet >= minNet;
+      const valueOk = minNet === null || metenoxNet >= minNet;
       const textOk = !searchText || text.includes(searchText);
 
       const show = rarityOk && structureOk && valueOk && textOk;
@@ -253,10 +253,10 @@
     applyFilters();
   });
 
-  // Min value – input is in M ISK, convert to raw
+  // Min value – input is in M ISK, convert to raw; empty = no filter
   document.getElementById('minNetFilter').addEventListener('input', function () {
     const parsed = parseFloat(this.value);
-    minNet = isNaN(parsed) ? 0 : Math.round(parsed * 1_000_000);
+    minNet = (this.value.trim() === '' || isNaN(parsed)) ? null : Math.round(parsed * 1_000_000);
     applyFilters();
   });
 
