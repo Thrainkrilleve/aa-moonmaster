@@ -547,6 +547,12 @@ def process_survey(self, raw: str, user_id: int):
         from .providers import get_or_create_moon
         from .constants import MOON_ORE_RARITY, RARITY_UBIQUITOUS
 
+        # Type IDs that appear in some probe-scanner exports but are incorrect.
+        # 45509 is a ship SKIN; the real Cinnabar (R32) is 45506.
+        _BAD_TYPE_IDS = {
+            45509: 45506,  # Cinnabar: SKIN id → real ore id
+        }
+
         created = updated = 0
         errors: list = []
         moon_rows: dict = {}
@@ -569,6 +575,7 @@ def process_survey(self, raw: str, user_id: int):
             except (ValueError, IndexError) as exc:
                 errors.append(f"Line {lineno}: {exc}")
                 continue
+            type_id = _BAD_TYPE_IDS.get(type_id, type_id)  # correct known wrong IDs
             if moon_id not in moon_rows:
                 moon_rows[moon_id] = {"composition": {}}
             moon_rows[moon_id]["composition"][str(type_id)] = quantity
