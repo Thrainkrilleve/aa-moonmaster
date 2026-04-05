@@ -166,10 +166,14 @@ def extractions(request):
 
     qs = Extraction.objects.select_related(
         "structure__moon", "structure__owner__corporation"
-    ).order_by("-chunk_arrival_time")
+    )
 
     if status_filter == "active":
-        qs = qs.filter(status__in=[Extraction.Status.SCHEDULED, Extraction.Status.READY])
+        qs = qs.filter(
+            status__in=[Extraction.Status.SCHEDULED, Extraction.Status.READY]
+        ).order_by("chunk_arrival_time")   # soonest first for active view
+    else:
+        qs = qs.order_by("-chunk_arrival_time")
 
     owners = StructureOwner.objects.select_related("corporation").order_by(
         "corporation__corporation_name"

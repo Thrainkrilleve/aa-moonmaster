@@ -1,5 +1,5 @@
 {% extends "moonmaster/base.html" %}
-{% load i18n %}
+{% load i18n tz %}
 
 {% block moonmaster_content %}
 <div class="container-fluid">
@@ -44,9 +44,10 @@
             <th>{% trans "Moon" %}</th>
             <th>{% trans "Structure" %}</th>
             <th>{% trans "Owner" %}</th>
-            <th>{% trans "Start Time" %}</th>
-            <th>{% trans "Chunk Arrival" %}</th>
-            <th>{% trans "Auto-Fire" %}</th>
+            <th>{% trans "Start Time" %} <span class="text-muted small">(EVE)</span></th>
+            <th>{% trans "Chunk Arrival" %} <span class="text-muted small">(EVE)</span></th>
+            <th>{% trans "Auto-Fire" %} <span class="text-muted small">(EVE)</span></th>
+            <th>{% trans "Fires In" %}</th>
             <th>{% trans "Status" %}</th>
             <th>{% trans "Est. Value" %}</th>
           </tr>
@@ -63,9 +64,25 @@
             </td>
             <td>{{ ext.structure.name|default:ext.structure.structure_id }}</td>
             <td>{{ ext.structure.owner.corporation.corporation_name }}</td>
-            <td>{{ ext.extraction_start_time|date:"Y-m-d H:i" }}</td>
-            <td>{{ ext.chunk_arrival_time|date:"Y-m-d H:i" }}</td>
-            <td>{{ ext.natural_decay_time|date:"Y-m-d H:i" }}</td>
+            <td>{% timezone "UTC" %}{{ ext.extraction_start_time|date:"Y-m-d H:i" }}{% endtimezone %}</td>
+            <td>{% timezone "UTC" %}{{ ext.chunk_arrival_time|date:"Y-m-d H:i" }}{% endtimezone %}</td>
+            <td>{% timezone "UTC" %}{{ ext.natural_decay_time|date:"Y-m-d H:i" }}{% endtimezone %}</td>
+            {# Fires In countdown column #}
+            {% if ext.status == 'scheduled' %}
+            <td class="text-nowrap"
+                data-countdown="{{ ext.chunk_arrival_time|date:'c' }}"
+                data-countdown-label="chunk">
+              <span class="mm-countdown text-warning fw-semibold">…</span>
+            </td>
+            {% elif ext.status == 'ready' %}
+            <td class="text-nowrap"
+                data-countdown="{{ ext.natural_decay_time|date:'c' }}"
+                data-countdown-label="autofire">
+              <span class="mm-countdown fw-semibold text-danger">…</span>
+            </td>
+            {% else %}
+            <td><span class="text-muted">—</span></td>
+            {% endif %}
             <td>
               <span class="badge bg-{% if ext.status == 'ready' %}success{% elif ext.status == 'fired' %}secondary{% elif ext.status == 'cancelled' %}danger{% else %}warning text-dark{% endif %}">
                 {{ ext.get_status_display }}
@@ -79,7 +96,7 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="8" class="text-center py-4">
+            <td colspan="9" class="text-center py-4">
               {% if status_filter == 'active' %}
                 <p class="text-muted mb-1">{% trans "No active drill cycles right now." %}</p>
                 {% if total_count %}
@@ -123,4 +140,59 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block moonmaster_js %}
+<script>
+(function () {
+  function formatCountdown(targetIso, label) {
+    const target = new Date(targetIso);
+    const now = new Date();
+    const diffMs = target - now;
+
+    if (diffMs <= 0) {
+      return label === 'autofire' ? '<span class="text-danger">Auto-firing now</span>'
+                                  : '<span class="text-success">Chunk arrived</span>';
+    }
+
+    const totalSec = Math.floor(diffMs / 1000);
+    const days     = Math.floor(totalSec / 86400);
+    const hours    = Math.floor((totalSec % 86400) / 3600);
+    const mins     = Math.floor((totalSec % 3600)  / 60);
+
+    if (days > 0) {
+      return days + 'd ' + hours + 'h';
+    } else if (hours > 0) {
+      return hours + 'h ' + mins + 'm';
+    } else {
+      return mins + 'm';
+    }
+  }
+
+  function updateCountdowns() {
+    document.querySelectorAll('[data-countdown]').forEach(function (td) {
+      const iso   = td.dataset.countdown;
+      const label = td.dataset.countdownLabel || '';
+      const span  = td.querySelector('.mm-countdown');
+      if (!span || !iso) return;
+
+      const target = new Date(iso);
+      const diffMs = target - new Date();
+
+      // Colour by urgency for autofire (ready state)
+      if (label === 'autofire') {
+        span.className = 'mm-countdown fw-semibold ' + (
+          diffMs < 3  * 3600 * 1000 ? 'text-danger' :
+          diffMs < 24 * 3600 * 1000 ? 'text-warning' : 'text-info'
+        );
+      }
+
+      span.innerHTML = formatCountdown(iso, label);
+    });
+  }
+
+  updateCountdowns();
+  setInterval(updateCountdowns, 60000);
+})();
+</script>
 {% endblock %}

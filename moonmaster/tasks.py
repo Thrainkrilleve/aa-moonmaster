@@ -231,7 +231,7 @@ def _sync_owner_extractions(owner):
 
     corp_id = owner.corporation.corporation_id
     try:
-        extractions = esi_authed_get(f"/corporations/{corp_id}/mining/extractions/", token)
+        extractions = esi_authed_get(f"/corporation/{corp_id}/mining/extractions/", token)
     except Exception as exc:
         msg = f"ESI extractions fetch failed for {owner}: {exc}"
         logger.exception(msg)
