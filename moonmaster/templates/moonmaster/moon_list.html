@@ -44,6 +44,288 @@
         <span class="small text-muted me-1">{% trans "Structure:" %}</span>
         <button class="btn btn-sm btn-outline-secondary structure-btn active" data-structure="all">{% trans "All" %}</button>
         <button class="btn btn-sm btn-outline-primary structure-btn" data-structure="athanor">
+          <i class="fas fa-tools me-1"></i>{% trans "Moon Drill" %}
+        </button>
+        <button class="btn btn-sm btn-outline-info structure-btn" data-structure="metenox">
+          <i class="fas fa-industry me-1"></i>{% trans "Metenox" %}
+        </button>
+        <button class="btn btn-sm btn-outline-secondary structure-btn" data-structure="none">
+          {% trans "Unstructured" %}
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Moon table ──────────────────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0" id="moonTable">
+        <thead class="table-dark">
+          <tr>
+            <th class="mm-sortable" data-col="0" data-type="text" style="cursor:pointer; user-select:none; white-space:nowrap;">
+              {% trans "Moon" %} <span class="mm-sort-icon text-muted small">⇅</span>
+            </th>
+            <th class="mm-sortable" data-col="1" data-type="text" style="cursor:pointer; user-select:none; white-space:nowrap;">
+              {% trans "System" %} <span class="mm-sort-icon text-muted small">⇅</span>
+            </th>
+            <th class="mm-sortable" data-col="2" data-type="text" style="cursor:pointer; user-select:none; white-space:nowrap;">
+              {% trans "Region" %} <span class="mm-sort-icon text-muted small">⇅</span>
+            </th>
+            <th class="mm-sortable" data-col="3" data-type="rarity" style="cursor:pointer; user-select:none; white-space:nowrap;">
+              {% trans "Rarity" %} <span class="mm-sort-icon text-muted small">⇅</span>
+            </th>
+            <th class="text-end mm-sortable" data-col="4" data-type="drill-net" style="cursor:pointer; user-select:none; white-space:nowrap;">
+              {% trans "Athanor Net/mo" %} <span class="mm-sort-icon text-muted small">⇅</span>
+            </th>
+            <th class="text-end mm-sortable" data-col="5" data-type="metenox-net" style="cursor:pointer; user-select:none; white-space:nowrap;">
+              {% trans "Metenox Net/mo" %} <span class="mm-sort-icon text-muted small">⇅</span>
+            </th>
+            <th>{% trans "Structures" %}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in moon_rows %}
+          {% with moon=row.moon %}
+          <tr data-rarity="{{ moon.rarity_class }}"
+              data-has-athanor="{{ row.has_athanor|yesno:'1,0' }}"
+              data-has-metenox="{{ row.has_metenox|yesno:'1,0' }}"
+              data-metenox-net="{{ row.metenox_net }}"
+              data-drill-net="{{ row.drill_net }}">
+            <td>{{ moon.name }}</td>
+            <td>{{ moon.solar_system_name }}</td>
+            <td>{{ moon.region_name|default:"—" }}</td>
+            <td data-rarity-order="{{ moon.rarity_class }}">
+              {% if moon.rarity_class %}
+              <span class="badge mm-rarity-{{ moon.rarity_class }}" title="{{ moon.get_rarity_class_display }}">
+                {{ moon.get_rarity_class_display }}
+              </span>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-end {% if row.drill_net < 0 %}text-danger{% else %}text-success{% endif %}">
+              {{ row.drill_net|intcomma }} ISK
+            </td>
+            <td class="text-end {% if row.metenox_net < 0 %}text-danger{% else %}text-success{% endif %}">
+              {{ row.metenox_net|intcomma }} ISK
+            </td>
+            <td>
+              {% for s in moon.structures.all %}
+                <span class="badge {% if s.structure_type == 'metenox' %}bg-info text-dark{% else %}bg-secondary{% endif %} me-1">
+                  {{ s.get_structure_type_display }}
+                </span>
+              {% empty %}
+                <span class="text-muted">—</span>
+              {% endfor %}
+            </td>
+            <td>
+              <a href="{% url 'moonmaster:moon_detail' moon.pk %}" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-chart-bar"></i> {% trans "Details" %}
+              </a>
+            </td>
+          </tr>
+          {% endwith %}
+          {% empty %}
+          <tr><td colspan="8" class="text-muted text-center py-4">{% trans "No moons tracked yet. Add moons via the admin panel." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block moonmaster_js %}
+<script>
+(function () {
+  const tbody = document.querySelector('#moonTable tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr[data-rarity]'));
+  const countEl = document.getElementById('moonCount');
+  const total = rows.length;
+
+  let activeRarity = 'all';
+  let activeStructure = 'all';
+  let minNet = 0;
+  let searchText = '';
+  let sortCol = 5;        // default: Metenox Net/mo descending (already sorted server-side)
+  let sortDir = -1;       // -1 = desc, 1 = asc
+
+  const RARITY_ORDER = {
+    ubiquitous: 0, common: 1, uncommon: 2, rare: 3, exceptional: 4, '': -1
+  };
+
+  function updateCount(visible) {
+    if (countEl) countEl.textContent = visible + ' / ' + total + ' {% trans "moons" %}';
+  }
+
+  function applyFilters() {
+    let visible = 0;
+    rows.forEach(function (row) {
+      const rarity = row.dataset.rarity || '';
+      const hasAthanor = row.dataset.hasAthanor === '1';
+      const hasMetenox = row.dataset.hasMetenox === '1';
+      const metenoxNet = parseInt(row.dataset.metenoxNet || '0', 10);
+      const text = row.textContent.toLowerCase();
+
+      const rarityOk = activeRarity === 'all' || rarity === activeRarity;
+      const structureOk =
+        activeStructure === 'all' ||
+        (activeStructure === 'athanor' && hasAthanor) ||
+        (activeStructure === 'metenox' && hasMetenox) ||
+        (activeStructure === 'none' && !hasAthanor && !hasMetenox);
+      const valueOk = metenoxNet >= minNet;
+      const textOk = !searchText || text.includes(searchText);
+
+      const show = rarityOk && structureOk && valueOk && textOk;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    updateCount(visible);
+  }
+
+  function sortRows(colIdx, colType) {
+    rows.sort(function (a, b) {
+      let valA, valB;
+      if (colType === 'rarity') {
+        valA = RARITY_ORDER[a.querySelector('td[data-rarity-order]').dataset.rarityOrder] ?? -1;
+        valB = RARITY_ORDER[b.querySelector('td[data-rarity-order]').dataset.rarityOrder] ?? -1;
+        return sortDir * (valA - valB);
+      } else if (colType === 'metenox-net') {
+        valA = parseInt(a.dataset.metenoxNet || '0', 10);
+        valB = parseInt(b.dataset.metenoxNet || '0', 10);
+        return sortDir * (valA - valB);
+      } else if (colType === 'drill-net') {
+        valA = parseInt(a.dataset.drillNet || '0', 10);
+        valB = parseInt(b.dataset.drillNet || '0', 10);
+        return sortDir * (valA - valB);
+      } else {
+        // text columns
+        valA = (a.querySelectorAll('td')[colIdx].textContent || '').trim().toLowerCase();
+        valB = (b.querySelectorAll('td')[colIdx].textContent || '').trim().toLowerCase();
+        return sortDir * valA.localeCompare(valB);
+      }
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+    applyFilters();
+  }
+
+  function updateSortIcons(activeColIdx) {
+    document.querySelectorAll('.mm-sortable').forEach(function (th) {
+      const icon = th.querySelector('.mm-sort-icon');
+      if (!icon) return;
+      if (parseInt(th.dataset.col, 10) === activeColIdx) {
+        icon.textContent = sortDir === 1 ? ' ▲' : ' ▼';
+        icon.classList.remove('text-muted');
+        icon.classList.add('text-info');
+      } else {
+        icon.textContent = ' ⇅';
+        icon.classList.remove('text-info');
+        icon.classList.add('text-muted');
+      }
+    });
+  }
+
+  // Initialise count
+  updateCount(total);
+  updateSortIcons(sortCol);
+
+  // Column sort
+  document.querySelectorAll('.mm-sortable').forEach(function (th) {
+    th.addEventListener('click', function () {
+      const col = parseInt(this.dataset.col, 10);
+      const colType = this.dataset.type;
+      if (col === sortCol) {
+        sortDir = -sortDir;
+      } else {
+        sortCol = col;
+        sortDir = colType === 'text' ? 1 : -1;
+      }
+      updateSortIcons(col);
+      sortRows(col, colType);
+    });
+  });
+
+  // Text search
+  document.getElementById('moonSearch').addEventListener('input', function () {
+    searchText = this.value.toLowerCase().trim();
+    applyFilters();
+  });
+
+  // Min value – input is in M ISK, convert to raw
+  document.getElementById('minNetFilter').addEventListener('input', function () {
+    const parsed = parseFloat(this.value);
+    minNet = isNaN(parsed) ? 0 : Math.round(parsed * 1_000_000);
+    applyFilters();
+  });
+
+  // Rarity buttons
+  document.querySelectorAll('.rarity-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.rarity-btn').forEach(function (b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      activeRarity = this.dataset.rarity;
+      applyFilters();
+    });
+  });
+
+  // Structure buttons
+  document.querySelectorAll('.structure-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.structure-btn').forEach(function (b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      activeStructure = this.dataset.structure;
+      applyFilters();
+    });
+  });
+})();
+</script>
+{% endblock %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+  <h2><i class="fas fa-globe me-2"></i>{% trans "Moon Database" %}</h2>
+
+  {# ── Filter panel ────────────────────────────────────────────────────── #}
+  <div class="card mb-3">
+    <div class="card-body">
+
+      {# Row 1: search + value threshold + count #}
+      <div class="row g-2 align-items-end mb-2">
+        <div class="col-md-4">
+          <label class="form-label small text-muted mb-1">{% trans "Search" %}</label>
+          <input id="moonSearch" type="text" class="form-control form-control-sm"
+                 placeholder="{% trans 'Moon, system, region…' %}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small text-muted mb-1">{% trans "Min Metenox Net" %}</label>
+          <div class="input-group input-group-sm">
+            <input id="minNetFilter" type="number" class="form-control" placeholder="0" min="0" step="1">
+            <span class="input-group-text">M ISK/mo</span>
+          </div>
+        </div>
+        <div class="col text-end">
+          <span class="text-muted small" id="moonCount"></span>
+        </div>
+      </div>
+
+      {# Row 2: Rarity toggles #}
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+        <span class="small text-muted me-1">{% trans "Rarity:" %}</span>
+        <button class="btn btn-sm btn-outline-secondary rarity-btn active" data-rarity="all">{% trans "All" %}</button>
+        <button class="btn btn-sm btn-outline-secondary rarity-btn" data-rarity="ubiquitous">R4 — {% trans "Ubiquitous" %}</button>
+        <button class="btn btn-sm btn-outline-success rarity-btn"   data-rarity="common">R8 — {% trans "Common" %}</button>
+        <button class="btn btn-sm btn-outline-info rarity-btn"      data-rarity="uncommon">R16 — {% trans "Uncommon" %}</button>
+        <button class="btn btn-sm btn-outline-primary rarity-btn"   data-rarity="rare">R32 — {% trans "Rare" %}</button>
+        <button class="btn btn-sm btn-outline-danger rarity-btn"    data-rarity="exceptional">R64 — {% trans "Exceptional" %}</button>
+      </div>
+
+      {# Row 3: Structure toggles #}
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="small text-muted me-1">{% trans "Structure:" %}</span>
+        <button class="btn btn-sm btn-outline-secondary structure-btn active" data-structure="all">{% trans "All" %}</button>
+        <button class="btn btn-sm btn-outline-primary structure-btn" data-structure="athanor">
           <i class="fas fa-tools me-1"></i>{% trans "Has Athanor" %}
         </button>
         <button class="btn btn-sm btn-outline-info structure-btn" data-structure="metenox">
