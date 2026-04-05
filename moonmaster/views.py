@@ -35,19 +35,28 @@ def _get_tax_config(user):
 def _build_ore_rows(moon):
     """
     Return a list of dicts for the ore composition table on moon_detail,
-    sorted by fraction descending.  Each dict has: name, type_id, fraction, rarity, tier.
+    sorted by fraction descending.  Each dict has: name, type_id, fraction,
+    rarity, tier, quantity (units per 30-day Athanor drill month).
     """
-    from .constants import MOON_ORE_NAMES, MOON_ORE_RARITY, RARITY_TIER_LABEL
+    from .constants import (
+        MOON_ORE_NAMES, MOON_ORE_RARITY, RARITY_TIER_LABEL,
+        MOON_ORE_VOLUME_M3, MOON_ORE_VOLUME_DEFAULT_M3,
+        MOONMINING_VOLUME_PER_DAY, MOONMINING_DAYS_PER_MONTH,
+    )
+    total_monthly_m3 = MOONMINING_VOLUME_PER_DAY * MOONMINING_DAYS_PER_MONTH
     rows = []
     for tid_str, frac in moon.ore_composition.items():
         tid = int(tid_str)
         rarity = MOON_ORE_RARITY.get(tid, "")
+        ore_vol = MOON_ORE_VOLUME_M3.get(tid, MOON_ORE_VOLUME_DEFAULT_M3)
+        quantity = int(frac * total_monthly_m3 / ore_vol) if ore_vol else 0
         rows.append({
             "name": MOON_ORE_NAMES.get(tid, f"Unknown ({tid})"),
             "type_id": tid,
             "fraction": frac,
             "rarity": rarity,
             "tier": RARITY_TIER_LABEL.get(rarity, ""),
+            "quantity": quantity,
         })
     rows.sort(key=lambda r: -r["fraction"])
     return rows
@@ -100,10 +109,13 @@ def moon_list(request):
     for moon in moons:
         calc = MoonProfitCalculator(moon=moon, tax_config=tax_config)
         tbl = calc.comparison_table()
+        structure_types = {s.structure_type for s in moon.structures.all()}
         moon_rows.append({
             "moon": moon,
             "drill_net": int(tbl.drill.net_isk_per_month) if tbl.drill else 0,
             "metenox_net": int(tbl.metenox.net_isk_per_month) if tbl.metenox else 0,
+            "has_athanor": STRUCTURE_TYPE_ATHANOR in structure_types,
+            "has_metenox": STRUCTURE_TYPE_METENOX in structure_types,
         })
     moon_rows.sort(key=lambda r: r["metenox_net"], reverse=True)
     context = {"moon_rows": moon_rows}

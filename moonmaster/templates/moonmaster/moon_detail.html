@@ -27,7 +27,16 @@
         <div class="card-body">
           {% if ore_rows %}
             <table class="table table-sm">
-              <thead><tr><th>{% trans "Ore" %}</th><th>{% trans "Tier" %}</th><th>{% trans "Fraction" %}</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>{% trans "Ore" %}</th>
+                  <th>{% trans "Tier" %}</th>
+                  <th>{% trans "Fraction" %}</th>
+                  <th class="text-end" title="{% trans 'Units yielded from a 30-day Athanor drill cycle at 960,400 m³/day' %}">
+                    {% trans "Qty / Month" %} <i class="fas fa-info-circle text-muted small"></i>
+                  </th>
+                </tr>
+              </thead>
               <tbody>
                 {% for ore in ore_rows %}
                 <tr>
@@ -37,13 +46,14 @@
                       <span class="badge mm-rarity-{{ ore.rarity }}">{{ ore.tier }}</span>
                     {% endif %}
                   </td>
-                  <td style="min-width:160px;">
+                  <td style="min-width:140px;">
                     <div class="progress" style="height:18px;">
                       <div class="progress-bar mm-rarity-{{ ore.rarity }}" style="width:{% widthratio ore.fraction 1 100 %}%">
                         {% widthratio ore.fraction 1 100 %}%
                       </div>
                     </div>
                   </td>
+                  <td class="text-end text-nowrap">{{ ore.quantity|intcomma }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
