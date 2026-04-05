@@ -134,38 +134,39 @@ SERVICE_MODULE_FUEL_PER_HOUR: dict = {
 }
 
 # ---------------------------------------------------------------------------
-# Moon ore packaged volume (m³/unit) — used to convert ESI ISK/unit → ISK/m³
-# Source: EVE SDE / in-game show info.  All standard moon ores are 0.1 m³/unit.
+# Moon ore packaged volume (m³/unit) — used to convert ISK/unit → ISK/m³
+# Source: EVE SDE (eveuniverse EveType.volume).  All moon ores are 10.0 m³/unit.
+# Compressed variants are 0.1 m³/unit but those are never in moon compositions.
 # ---------------------------------------------------------------------------
 MOON_ORE_VOLUME_M3: dict = {
     # R4 Ubiquitous
-    45490: 0.1,  # Zeolites
-    45491: 0.1,  # Sylvite
-    45492: 0.1,  # Bitumens
-    45493: 0.1,  # Coesite
+    45490: 10.0,  # Zeolites
+    45491: 10.0,  # Sylvite
+    45492: 10.0,  # Bitumens
+    45493: 10.0,  # Coesite
     # R8 Common
-    45494: 0.1,  # Cobaltite
-    45495: 0.1,  # Euxenite
-    45496: 0.1,  # Titanite
-    45497: 0.1,  # Scheelite
+    45494: 10.0,  # Cobaltite
+    45495: 10.0,  # Euxenite
+    45496: 10.0,  # Titanite
+    45497: 10.0,  # Scheelite
     # R16 Uncommon
-    45498: 0.1,  # Otavite
-    45499: 0.1,  # Sperrylite
-    45500: 0.1,  # Vanadinite
-    45501: 0.1,  # Chromite
+    45498: 10.0,  # Otavite
+    45499: 10.0,  # Sperrylite
+    45500: 10.0,  # Vanadinite
+    45501: 10.0,  # Chromite
     # R32 Rare
-    45502: 0.1,  # Carnotite
-    45503: 0.1,  # Zircon
-    45504: 0.1,  # Loparite
-    45505: 0.1,  # Monazite
+    45502: 10.0,  # Carnotite
+    45503: 10.0,  # Zircon
+    45504: 10.0,  # Pollucite
+    45506: 10.0,  # Cinnabar
     # R64 Exceptional
-    45506: 0.1,  # Xenotime
-    45507: 0.1,  # Ytterbite
-    45508: 0.1,  # Pollucite
-    45509: 0.1,  # Cinnabar
+    45510: 10.0,  # Xenotime
+    45511: 10.0,  # Monazite
+    45512: 10.0,  # Loparite
+    45513: 10.0,  # Ytterbite
 }
-# Default volume for any ore type not listed above
-MOON_ORE_VOLUME_DEFAULT_M3 = 0.1
+# Default volume for any ore type not listed above (moon ores are 10.0 m³/unit)
+MOON_ORE_VOLUME_DEFAULT_M3 = 10.0
 
 # ---------------------------------------------------------------------------
 # Moon ore type_id → human-readable name
@@ -189,13 +190,13 @@ MOON_ORE_NAMES: dict = {
     # R32 Rare
     45502: "Carnotite",
     45503: "Zircon",
-    45504: "Loparite",
-    45505: "Monazite",
+    45504: "Pollucite",
+    45506: "Cinnabar",
     # R64 Exceptional
-    45506: "Xenotime",
-    45507: "Ytterbite",
-    45508: "Pollucite",
-    45509: "Cinnabar",
+    45510: "Xenotime",
+    45511: "Monazite",
+    45512: "Loparite",
+    45513: "Ytterbite",
 }
 
 # ---------------------------------------------------------------------------
@@ -220,13 +221,13 @@ MOON_ORE_RARITY: dict = {
     # R32 Rare
     45502: RARITY_RARE,  # Carnotite
     45503: RARITY_RARE,  # Zircon
-    45504: RARITY_RARE,  # Loparite
-    45505: RARITY_RARE,  # Monazite
+    45504: RARITY_RARE,  # Pollucite
+    45506: RARITY_RARE,  # Cinnabar
     # R64 Exceptional
-    45506: RARITY_EXCEPTIONAL,  # Xenotime
-    45507: RARITY_EXCEPTIONAL,  # Ytterbite
-    45508: RARITY_EXCEPTIONAL,  # Pollucite
-    45509: RARITY_EXCEPTIONAL,  # Cinnabar
+    45510: RARITY_EXCEPTIONAL,  # Xenotime
+    45511: RARITY_EXCEPTIONAL,  # Monazite
+    45512: RARITY_EXCEPTIONAL,  # Loparite
+    45513: RARITY_EXCEPTIONAL,  # Ytterbite
 }
 
 # ---------------------------------------------------------------------------
