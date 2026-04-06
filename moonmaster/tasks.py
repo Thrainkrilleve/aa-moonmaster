@@ -456,14 +456,26 @@ def send_alerts(self):
       - Metenox fuel expiring within 24 h
       - Goo bay above 80% full
       - Extraction chunk arriving within 1 h
+
+    Each alert type per structure is throttled to once per cooldown window:
+      - fuel low:      every 4 h
+      - goo bay full:  every 4 h
+      - extraction:    every 1 h
     """
     try:
+        from django.core.cache import cache
         from .models import Structure, Extraction
         from .constants import STRUCTURE_TYPE_METENOX
 
         now = timezone.now()
         soon = now + timedelta(hours=24)
         very_soon = now + timedelta(hours=1)
+
+        def _already_alerted(key, timeout_seconds):
+            if cache.get(key):
+                return True
+            cache.set(key, 1, timeout=timeout_seconds)
+            return False
 
         # --- Fuel low ---
         low_fuel = Structure.objects.filter(
@@ -472,6 +484,9 @@ def send_alerts(self):
             is_online=True,
         )
         for structure in low_fuel:
+            cache_key = f"mm_alert_fuel_{structure.pk}"
+            if _already_alerted(cache_key, 4 * 3600):
+                continue
             _send_discord_alert(
                 structure.owner,
                 f"⛽ **Fuel Low** — {structure} fuel expires "
@@ -485,6 +500,9 @@ def send_alerts(self):
             is_online=True,
         )
         for structure in full_bay:
+            cache_key = f"mm_alert_goobay_{structure.pk}"
+            if _already_alerted(cache_key, 4 * 3600):
+                continue
             _send_discord_alert(
                 structure.owner,
                 f"🪣 **Goo Bay {structure.goo_bay_fill_pct:.0f}% Full** — {structure}",
@@ -496,6 +514,9 @@ def send_alerts(self):
             chunk_arrival_time__lte=very_soon,
         ).select_related("structure__owner")
         for extraction in due_extractions:
+            cache_key = f"mm_alert_extraction_{extraction.pk}"
+            if _already_alerted(cache_key, 1 * 3600):
+                continue
             _send_discord_alert(
                 extraction.structure.owner,
                 f"⛏️ **Extraction Ready** — {extraction.structure.moon} chunk arrives "
@@ -767,10 +788,15 @@ def _sync_metenox_bays(owner):
     Fetch corporation assets, sum moon material volumes per Metenox structure,
     and update Structure.goo_bay_fill_pct.
 
+    The MoonMaterialBay holds already-processed moon goo materials (type IDs
+    16633-16655, each 0.05 m³/unit), NOT raw ores.  We resolve volumes
+    dynamically from the SDE so the calculation is correct regardless of what
+    CCP puts in the bay.
+
     Requires esi-assets.read_corporation_assets.v1.  Silently skipped if the
     owner's character doesn't have that scope.
     """
-    from .constants import STRUCTURE_TYPE_METENOX, METENOX_MOON_MATERIAL_BAY_CAPACITY, MOON_ORE_VOLUME_M3, MOON_ORE_VOLUME_DEFAULT_M3
+    from .constants import STRUCTURE_TYPE_METENOX, METENOX_MOON_MATERIAL_BAY_CAPACITY
     from .models import Structure
     from .providers import (
         SCOPE_ASSETS,
@@ -789,16 +815,35 @@ def _sync_metenox_bays(owner):
         logger.warning("_sync_metenox_bays: assets fetch failed for %s: %s", owner, exc)
         return
 
-    # Sum volume of moon material bay items per structure
+    # Collect items in MoonMaterialBay and gather their type IDs
+    bay_items = [a for a in assets if a.get("location_flag") == "MoonMaterialBay"]
+
+    # Build a volume map: type_id → m³/unit, resolved from SDE with fallback to 0.05
+    type_ids = {item.get("type_id", 0) for item in bay_items}
+    vol_map: dict = {}
+    if type_ids:
+        try:
+            from eve_sde.models import ItemType as SdeItemType
+            for row in SdeItemType.objects.filter(id__in=type_ids).values("id", "volume"):
+                vol_map[row["id"]] = float(row["volume"])
+        except Exception:
+            pass
+    # Fall back: moon goo materials are 0.05 m³/unit; raw ores are 10.0 m³/unit
+    # Use 0.05 as the default since the Metenox bay holds processed materials.
+    GOO_MATERIAL_VOLUME_DEFAULT = 0.05
+    from .constants import MOON_ORE_VOLUME_M3  # raw ores still looked up correctly
+    for item in bay_items:
+        tid = item.get("type_id", 0)
+        if tid not in vol_map:
+            vol_map[tid] = MOON_ORE_VOLUME_M3.get(tid, GOO_MATERIAL_VOLUME_DEFAULT)
+
+    # Sum volume per structure location
     bay_volumes: dict = {}
-    for item in assets:
-        if item.get("location_flag") != "MoonMaterialBay":
-            continue
+    for item in bay_items:
         loc_id = item.get("location_id")
-        type_id = item.get("type_id", 0)
+        tid = item.get("type_id", 0)
         quantity = item.get("quantity", 0)
-        vol_per_unit = MOON_ORE_VOLUME_M3.get(type_id, MOON_ORE_VOLUME_DEFAULT_M3)
-        bay_volumes[loc_id] = bay_volumes.get(loc_id, 0.0) + quantity * vol_per_unit
+        bay_volumes[loc_id] = bay_volumes.get(loc_id, 0.0) + quantity * vol_map.get(tid, GOO_MATERIAL_VOLUME_DEFAULT)
 
     # Update matching Metenox Structure records
     metenox_sids = list(
