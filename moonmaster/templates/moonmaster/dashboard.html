@@ -177,11 +177,20 @@
                 </td>
                 <td>
                   {% if s.goo_bay_fill_pct is not None %}
-                    <div class="progress" style="height:16px;">
-                      <div class="progress-bar {% if s.goo_bay_fill_pct >= 80 %}bg-danger{% elif s.goo_bay_fill_pct >= 60 %}bg-warning{% else %}bg-success{% endif %}"
-                           style="width:{{ s.goo_bay_fill_pct }}%">
-                        {{ s.goo_bay_fill_pct|floatformat:0 }}%
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="progress flex-grow-1" style="height:16px;">
+                        <div class="progress-bar {% if s.goo_bay_fill_pct >= 80 %}bg-danger{% elif s.goo_bay_fill_pct >= 60 %}bg-warning{% else %}bg-success{% endif %}"
+                             role="progressbar"
+                             style="width:{{ s.goo_bay_fill_pct }}%"
+                             aria-valuenow="{{ s.goo_bay_fill_pct|floatformat:0 }}"
+                             aria-valuemin="0" aria-valuemax="100">
+                        </div>
                       </div>
+                      <span class="text-nowrap fw-semibold
+                        {% if s.goo_bay_fill_pct >= 80 %}text-danger
+                        {% elif s.goo_bay_fill_pct >= 60 %}text-warning
+                        {% else %}text-success{% endif %}"
+                            style="min-width:3.2rem;">{{ s.goo_bay_fill_pct|floatformat:1 }}%</span>
                     </div>
                   {% else %}
                     <span class="text-muted">—</span>
