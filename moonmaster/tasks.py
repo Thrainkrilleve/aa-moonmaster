@@ -453,23 +453,31 @@ def _sync_owner_mining_ledger(owner):
 def send_alerts(self):
     """
     Check for alert conditions and dispatch Discord webhook notifications:
-      - Metenox fuel expiring within 24 h
-      - Goo bay above 80% full
-      - Extraction chunk arriving within 1 h
+      - Metenox fuel expiring within MOONMASTER_ALERT_FUEL_HOURS (default 24 h)
+      - Goo bay above MOONMASTER_ALERT_GOO_BAY_PCT (default 80 %)
+      - Extraction chunk arriving within MOONMASTER_ALERT_EXTRACTION_HOURS (default 1 h)
 
-    Each alert type per structure is throttled to once per cooldown window:
-      - fuel low:      every 4 h
-      - goo bay full:  every 4 h
-      - extraction:    every 1 h
+    Cooldown windows (prevent repeated alerts):
+      - fuel low / goo bay: MOONMASTER_ALERT_COOLDOWN_HOURS (default 4 h)
+      - extraction:         MOONMASTER_ALERT_EXTRACTION_COOLDOWN_HOURS (default 1 h)
+
+    All thresholds are configurable in local.py Django settings.
     """
     try:
+        from django.conf import settings
         from django.core.cache import cache
         from .models import Structure, Extraction
         from .constants import STRUCTURE_TYPE_METENOX
 
+        fuel_warn_hours        = getattr(settings, "MOONMASTER_ALERT_FUEL_HOURS", 24)
+        goo_bay_pct_threshold  = getattr(settings, "MOONMASTER_ALERT_GOO_BAY_PCT", 80)
+        extraction_warn_hours  = getattr(settings, "MOONMASTER_ALERT_EXTRACTION_HOURS", 1)
+        cooldown_hours         = getattr(settings, "MOONMASTER_ALERT_COOLDOWN_HOURS", 4)
+        extraction_cooldown_h  = getattr(settings, "MOONMASTER_ALERT_EXTRACTION_COOLDOWN_HOURS", 1)
+
         now = timezone.now()
-        soon = now + timedelta(hours=24)
-        very_soon = now + timedelta(hours=1)
+        soon = now + timedelta(hours=fuel_warn_hours)
+        very_soon = now + timedelta(hours=extraction_warn_hours)
 
         def _already_alerted(key, timeout_seconds):
             if cache.get(key):
@@ -485,7 +493,7 @@ def send_alerts(self):
         )
         for structure in low_fuel:
             cache_key = f"mm_alert_fuel_{structure.pk}"
-            if _already_alerted(cache_key, 4 * 3600):
+            if _already_alerted(cache_key, cooldown_hours * 3600):
                 continue
             _send_discord_alert(
                 structure.owner,
@@ -496,12 +504,12 @@ def send_alerts(self):
         # --- Goo bay filling ---
         full_bay = Structure.objects.filter(
             structure_type=STRUCTURE_TYPE_METENOX,
-            goo_bay_fill_pct__gte=80,
+            goo_bay_fill_pct__gte=goo_bay_pct_threshold,
             is_online=True,
         )
         for structure in full_bay:
             cache_key = f"mm_alert_goobay_{structure.pk}"
-            if _already_alerted(cache_key, 4 * 3600):
+            if _already_alerted(cache_key, cooldown_hours * 3600):
                 continue
             _send_discord_alert(
                 structure.owner,
@@ -515,7 +523,7 @@ def send_alerts(self):
         ).select_related("structure__owner")
         for extraction in due_extractions:
             cache_key = f"mm_alert_extraction_{extraction.pk}"
-            if _already_alerted(cache_key, 1 * 3600):
+            if _already_alerted(cache_key, extraction_cooldown_h * 3600):
                 continue
             _send_discord_alert(
                 extraction.structure.owner,
@@ -526,6 +534,7 @@ def send_alerts(self):
     except Exception as exc:
         logger.exception("moonmaster.send_alerts failed: %s", exc)
         raise self.retry(exc=exc, countdown=60, max_retries=3)
+
 
 
 def _send_discord_alert(owner, message: str):
