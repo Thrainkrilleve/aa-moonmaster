@@ -213,6 +213,13 @@ class Structure(models.Model):
         null=True, blank=True, verbose_name=_("Unanchors At"),
     )
 
+    # Detailed bay contents snapshot — list of {type_id, name, quantity, volume_m3}
+    goo_bay_contents = models.JSONField(
+        default=list,
+        verbose_name=_("Goo Bay Contents"),
+        help_text=_("Snapshot of processed moon materials in the bay: [{type_id, name, quantity, volume_m3}, …]."),
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

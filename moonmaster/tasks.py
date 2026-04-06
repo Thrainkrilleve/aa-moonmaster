@@ -827,14 +827,16 @@ def _sync_metenox_bays(owner):
     # Collect items in MoonMaterialBay and gather their type IDs
     bay_items = [a for a in assets if a.get("location_flag") == "MoonMaterialBay"]
 
-    # Build a volume map: type_id → m³/unit, resolved from SDE with fallback to 0.05
+    # Build a volume + name map: type_id → {volume, name}, resolved from SDE
     type_ids = {item.get("type_id", 0) for item in bay_items}
     vol_map: dict = {}
+    name_map: dict = {}
     if type_ids:
         try:
             from eve_sde.models import ItemType as SdeItemType
-            for row in SdeItemType.objects.filter(id__in=type_ids).values("id", "volume"):
+            for row in SdeItemType.objects.filter(id__in=type_ids).values("id", "volume", "name_en"):
                 vol_map[row["id"]] = float(row["volume"])
+                name_map[row["id"]] = row["name_en"] or f"Type {row['id']}"
         except Exception:
             pass
     # Fall back: moon goo materials are 0.05 m³/unit; raw ores are 10.0 m³/unit
@@ -845,14 +847,26 @@ def _sync_metenox_bays(owner):
         tid = item.get("type_id", 0)
         if tid not in vol_map:
             vol_map[tid] = MOON_ORE_VOLUME_M3.get(tid, GOO_MATERIAL_VOLUME_DEFAULT)
+        if tid not in name_map:
+            name_map[tid] = f"Type {tid}"
 
-    # Sum volume per structure location
-    bay_volumes: dict = {}
+    # Aggregate per-structure: {structure_id: {type_id: quantity}}
+    bay_qty: dict = {}
     for item in bay_items:
         loc_id = item.get("location_id")
         tid = item.get("type_id", 0)
         quantity = item.get("quantity", 0)
-        bay_volumes[loc_id] = bay_volumes.get(loc_id, 0.0) + quantity * vol_map.get(tid, GOO_MATERIAL_VOLUME_DEFAULT)
+        if loc_id not in bay_qty:
+            bay_qty[loc_id] = {}
+        bay_qty[loc_id][tid] = bay_qty[loc_id].get(tid, 0) + quantity
+
+    # Derive total volume per structure for fill % calculation
+    bay_volumes: dict = {}
+    for loc_id, items in bay_qty.items():
+        bay_volumes[loc_id] = sum(
+            qty * vol_map.get(tid, GOO_MATERIAL_VOLUME_DEFAULT)
+            for tid, qty in items.items()
+        )
 
     # Update matching Metenox Structure records
     metenox_sids = list(
@@ -863,8 +877,22 @@ def _sync_metenox_bays(owner):
     for structure_id in metenox_sids:
         vol = bay_volumes.get(structure_id, 0.0)
         fill_pct = min(vol / METENOX_MOON_MATERIAL_BAY_CAPACITY * 100.0, 100.0)
+
+        # Build sorted contents snapshot: largest volume contribution first
+        contents = []
+        for tid, qty in (bay_qty.get(structure_id) or {}).items():
+            item_vol = qty * vol_map.get(tid, GOO_MATERIAL_VOLUME_DEFAULT)
+            contents.append({
+                "type_id": tid,
+                "name": name_map.get(tid, f"Type {tid}"),
+                "quantity": qty,
+                "volume_m3": round(item_vol, 2),
+            })
+        contents.sort(key=lambda x: x["volume_m3"], reverse=True)
+
         Structure.objects.filter(structure_id=structure_id).update(
-            goo_bay_fill_pct=round(fill_pct, 1)
+            goo_bay_fill_pct=round(fill_pct, 1),
+            goo_bay_contents=contents,
         )
     logger.debug("_sync_metenox_bays: updated bay fill for %d Metenox(es) under %s.", len(metenox_sids), owner)
 
