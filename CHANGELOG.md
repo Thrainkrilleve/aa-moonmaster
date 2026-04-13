@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.36] - 2026-04-13
+
+### Fixed
+- Janice price source now uses **sell price** (top-5% average) instead of buy
+  price. Sell price reflects what players actually pay to purchase fuel blocks
+  and magmatic gas off the market, giving accurate operating cost estimates.
+  Previously buy prices understated Metenox monthly costs by ~35–80M ISK.
+
 ## [0.1.18] - 2026-04-03
 
 ### Fixed

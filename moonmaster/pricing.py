@@ -89,8 +89,9 @@ JANICE_JITA_MARKET_ID = 2
 
 def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Decimal]:
     """
-    Return a {type_id: buy_price} dict from Janice's bulk pricer endpoint.
-    Uses the top-5% average buy price at Jita (most stable valuation).
+    Return a {type_id: sell_price} dict from Janice's bulk pricer endpoint.
+    Uses the top-5% average sell price at Jita — this reflects what players
+    actually pay when buying items off the market (instant sell orders).
 
     Janice does NOT index moon ores by the same type IDs used in the EVE SDE
     (e.g. 45509 resolves to a ship SKIN in Janice's DB, not Cinnabar).  To
@@ -139,10 +140,11 @@ def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Dec
             if type_id is None:
                 logger.debug("Janice returned unknown item name %r — skipped.", returned_name)
                 continue
-            # Prefer top-5% average buy price; fall back to immediate buy price
+            # Use top-5% average sell price; fall back to immediate sell price.
+            # Sell price reflects what players actually pay to stock their structures.
             price = (
-                (item.get("top5AveragePrices") or {}).get("buyPrice")
-                or (item.get("immediatePrices") or {}).get("buyPrice")
+                (item.get("top5AveragePrices") or {}).get("sellPrice")
+                or (item.get("immediatePrices") or {}).get("sellPrice")
                 or 0
             )
             result[type_id] = Decimal(str(price))
