@@ -259,8 +259,13 @@ def _sync_owner_extractions(owner):
                 "structure_type": STRUCTURE_TYPE_ATHANOR,
             },
         )
-        # Backfill moon if it was created without one (from structures sync)
-        if structure.moon is None:
+        # ESI extraction data is authoritative for which moon an Athanor sits on.
+        # Update the link even if one is already set — handles reanchored structures.
+        if structure.moon_id != moon.pk:
+            logger.info(
+                "Correcting moon link for structure %s: %s → %s",
+                structure_id, structure.moon, moon,
+            )
             structure.moon = moon
             structure.save(update_fields=["moon"])
 
