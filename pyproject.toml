@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aa-moonmaster"
-version = "0.1.40"
+version = "0.1.41"
 description = "Unified moon mining & Metenox management for Alliance Auth — survey database, Athanor extractions, Metenox fuel/goo tracking, and real-time profitability with tax support."
 readme = "README.md"
 license = { text = "MIT" }

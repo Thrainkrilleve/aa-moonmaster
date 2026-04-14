@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
+## [0.1.41] - 2026-04-14
+### Fixed
+- Reverted extraction ESI endpoint back to `/corporation/{id}/mining/extractions/` (singular). This endpoint genuinely uses the singular form unlike other corp endpoints — the plural "fix" in v0.1.39 was incorrect and caused 404 errors.
+
 ## [0.1.40] - 2026-04-14
 ### Fixed
 - Reverted smart 404 detection in `esi_authed_get` — ESI returns `{"error": "Not found"}` for valid endpoints with no data (e.g. extractions endpoint when no extractions are active), not just for bad URLs. The smart check incorrectly raised errors on legitimately empty results.
