@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
+## [0.1.40] - 2026-04-14
+### Fixed
+- Reverted smart 404 detection in `esi_authed_get` — ESI returns `{"error": "Not found"}` for valid endpoints with no data (e.g. extractions endpoint when no extractions are active), not just for bad URLs. The smart check incorrectly raised errors on legitimately empty results.
+
 ## [0.1.39] - 2026-04-14
 ### Fixed
 - Extraction sync ESI endpoint corrected from `/corporation/` to `/corporations/` (plural). The typo caused ESI to return a 404 which was silently treated as "no extractions", marking all scheduled extractions as CANCELLED and leaving the app out of sync with in-game.
