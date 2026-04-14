@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
+## [0.1.39] - 2026-04-14
+### Fixed
+- Extraction sync ESI endpoint corrected from `/corporation/` to `/corporations/` (plural). The typo caused ESI to return a 404 which was silently treated as "no extractions", marking all scheduled extractions as CANCELLED and leaving the app out of sync with in-game.
+- `esi_authed_get` now distinguishes a valid 404 (empty result set) from a bad-URL 404 (error body), so misconfigured endpoints surface as real errors instead of returning empty data.
+
 ## [0.1.38] - 2026-04-14
 ### Fixed
 - Extraction sync now updates a structure's moon link even when one is already set, using ESI extraction data as the authoritative source. This fixes stale moon assignments when an Athanor is unanchored and reanchored at a different moon.
