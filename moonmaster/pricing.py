@@ -4,7 +4,7 @@ Pricing service for Moon Master.
 Supports three price sources:
   - ESI      : /markets/prices/ — adjusted price (same source the game uses)
   - Fuzzwork : https://market.fuzzwork.co.uk/aggregates/ — buy/sell per type_id
-  - Janice   : https://janice.e-351.com/api/rest/v2/pricer — Jita buy top-5%
+  - Janice   : https://janice.e-351.com/api/rest/v2/pricer — sell price for fuel/gas, buy price for ore
 
 Call ``update_all_prices(type_ids, source)`` to refresh the OrePrice table.
 Call ``get_prices(type_ids)`` to retrieve a {type_id: Decimal} mapping from cache.
@@ -89,9 +89,13 @@ JANICE_JITA_MARKET_ID = 2
 
 def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Decimal]:
     """
-    Return a {type_id: sell_price} dict from Janice's bulk pricer endpoint.
-    Uses the top-5% average sell price at Jita — this reflects what players
-    actually pay when buying items off the market (instant sell orders).
+    Return a {type_id: price} dict from Janice's bulk pricer endpoint.
+
+    Pricing logic:
+    - Fuel blocks and Magmatic Gas (input costs) → top-5% average *sell* price,
+      because that is what the structure operator pays to buy them off market.
+    - Moon ores (output value) → top-5% average *buy* price, because bulk ore
+      is realistically sold to buy orders or corp buyback programs.
 
     Janice does NOT index moon ores by the same type IDs used in the EVE SDE
     (e.g. 45509 resolves to a ship SKIN in Janice's DB, not Cinnabar).  To
@@ -101,6 +105,8 @@ def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Dec
 
     Raises requests.RequestException on failure.
     """
+    from .constants import FUEL_BLOCK_TYPE_IDS, ESI_TYPE_ID_MAGMATIC_GAS  # noqa: PLC0415
+    _fuel_ids = set(FUEL_BLOCK_TYPE_IDS) | {ESI_TYPE_ID_MAGMATIC_GAS}
     # Build a combined id→name map: moon ores (SDE-backed) + fuel/gas.
     # Try the SDE first for fuel names so any future CCP rename is picked up;
     # fall back to the hardcoded dict if the SDE is unavailable.
@@ -140,13 +146,20 @@ def _fetch_janice_prices(type_ids: Iterable[int], api_key: str) -> Dict[int, Dec
             if type_id is None:
                 logger.debug("Janice returned unknown item name %r — skipped.", returned_name)
                 continue
-            # Use top-5% average sell price; fall back to immediate sell price.
-            # Sell price reflects what players actually pay to stock their structures.
-            price = (
-                (item.get("top5AveragePrices") or {}).get("sellPrice")
-                or (item.get("immediatePrices") or {}).get("sellPrice")
-                or 0
-            )
+            # Fuel/gas → sell price (operator pays this to buy from market).
+            # Moon ore → buy price (realistic bulk sale to buy orders/buyback).
+            if type_id in _fuel_ids:
+                price = (
+                    (item.get("top5AveragePrices") or {}).get("sellPrice")
+                    or (item.get("immediatePrices") or {}).get("sellPrice")
+                    or 0
+                )
+            else:
+                price = (
+                    (item.get("top5AveragePrices") or {}).get("buyPrice")
+                    or (item.get("immediatePrices") or {}).get("buyPrice")
+                    or 0
+                )
             result[type_id] = Decimal(str(price))
         except (KeyError, TypeError, ValueError):
             pass

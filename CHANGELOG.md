@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+
+## [0.1.37] - 2026-04-14
+### Fixed
+- Janice pricing now uses **sell price for fuel blocks and Magmatic Gas** (input costs — what the operator pays to buy them) and **buy price for moon ores** (output value — realistic bulk sale to buy orders / corp buyback). Previously 0.1.36 used sell price for everything, inflating ore output values.
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
