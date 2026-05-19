@@ -1,0 +1,120 @@
+{% extends "moonmaster/base.html" %}
+{% load i18n %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h2><i class="fas fa-file-invoice me-2"></i>{% trans "Create Billing Record" %}</h2>
+    <a href="{% url 'moonmaster:drill_records' %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i>{% trans "Back to Records" %}
+    </a>
+  </div>
+
+  <div class="card" style="max-width:700px;">
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">{% trans "Structure (Metenox)" %}</label>
+          <select name="structure_id" class="form-select" required id="structureSelect">
+            <option value="">-- {% trans "Select structure" %} --</option>
+            {% for s in all_structures %}
+            <option value="{{ s.pk }}" data-char="" data-rate="">
+              {{ s.name|default:s.structure_id }}{% if s.moon %} — {{ s.moon.name }}{% endif %}
+              ({{ s.owner.corporation.corporation_name }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">{% trans "Owner Character" %}</label>
+          <select name="character_id" class="form-select" required id="charSelect">
+            <option value="">-- {% trans "Select character" %} --</option>
+            {% for c in all_chars %}
+            <option value="{{ c.pk }}" {% if c.pk|stringformat:"s" == preselect_char %}selected{% endif %}>
+              {{ c.character_name }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">
+            {% trans "Select the character assigned to this drill. You can also bill a different character if needed." %}
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">{% trans "Period Start" %}</label>
+            <input type="date" name="period_start" class="form-control" required>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">{% trans "Period End" %}</label>
+            <input type="date" name="period_end" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-8">
+            <label class="form-label fw-semibold">{% trans "Gross Goo Value (ISK)" %}</label>
+            <input type="number" name="gross_value_isk" step="1" min="0" class="form-control"
+                   id="grossInput" required placeholder="e.g. 500000000">
+            <div class="form-text">{% trans "Total ISK value of goo sold during this period." %}</div>
+          </div>
+          <div class="col-4">
+            <label class="form-label fw-semibold">{% trans "Tax Rate %" %}</label>
+            <input type="number" name="tax_rate_pct" step="0.1" min="0" max="100"
+                   class="form-control" id="rateInput" value="10" required>
+          </div>
+        </div>
+
+        <div class="mb-3 p-3 bg-body-secondary rounded">
+          <strong>{% trans "Tax Owed:" %}</strong>
+          <span id="taxOwedPreview" class="fs-5 ms-2 text-danger">0 ISK</span>
+          <div class="form-text">{% trans "Computed automatically from Gross × Rate." %}</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">{% trans "Notes" %}</label>
+          <textarea name="notes" class="form-control" rows="2"
+                    placeholder="{% trans 'Optional — e.g. contract #, sale date' %}"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-save me-1"></i>{% trans "Create Record" %}
+        </button>
+        <a href="{% url 'moonmaster:drill_records' %}" class="btn btn-outline-secondary ms-2">
+          {% trans "Cancel" %}
+        </a>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock moonmaster_content %}
+
+{% block extra_javascript %}
+{{ block.super }}
+<script>
+// Live tax-owed preview
+(function () {
+  const grossInput = document.getElementById("grossInput");
+  const rateInput  = document.getElementById("rateInput");
+  const preview    = document.getElementById("taxOwedPreview");
+
+  function update() {
+    const gross = parseFloat(grossInput.value) || 0;
+    const rate  = parseFloat(rateInput.value)  || 0;
+    const owed  = gross * (rate / 100);
+    preview.textContent = owed.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }) + " ISK";
+    preview.className = owed > 0 ? "fs-5 ms-2 text-danger" : "fs-5 ms-2 text-muted";
+  }
+
+  grossInput.addEventListener("input", update);
+  rateInput.addEventListener("input", update);
+})();
+</script>
+{% endblock extra_javascript %}

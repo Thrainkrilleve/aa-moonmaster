@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
+from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -13,7 +14,10 @@ from esi.decorators import token_required
 from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
 
 from .calculator import MoonProfitCalculator
-from .models import DrillOwnership, DrillTaxRecord, Extraction, Moon, OwnerCharacter, Structure, StructureOwner, TaxConfig
+from .models import (
+    DrillOwnership, DrillTaxPaymentConfig, DrillTaxRecord,
+    Extraction, Moon, OwnerCharacter, Structure, StructureOwner, TaxConfig,
+)
 from .constants import PRICE_SOURCE_ESI, STRUCTURE_TYPE_METENOX, STRUCTURE_TYPE_ATHANOR, REINFORCE_STATES
 
 
@@ -276,7 +280,42 @@ def manage_owners(request):
     ).prefetch_related(
         "owner_characters__character",
     ).order_by("corporation__corporation_name")
+
     context = {"owners": owners}
+
+    # Drill ownership management (separate permission)
+    if request.user.has_perm("moonmaster.manage_drill_tax"):
+        drill_ownerships = (
+            DrillOwnership.objects.select_related(
+                "structure__moon", "structure__owner__corporation", "character"
+            ).order_by("character__character_name", "structure__name")
+        )
+        # Metenox structures not yet assigned
+        assigned_ids = drill_ownerships.values_list("structure_id", flat=True)
+        unassigned_metenox = (
+            Structure.objects.filter(structure_type=STRUCTURE_TYPE_METENOX)
+            .exclude(pk__in=assigned_ids)
+            .select_related("moon", "owner__corporation")
+            .order_by("name")
+        )
+        all_metenox = Structure.objects.filter(
+            structure_type=STRUCTURE_TYPE_METENOX
+        ).select_related("moon", "owner__corporation").order_by("name")
+        eve_characters = EveCharacter.objects.order_by("character_name")
+        payment_configs = DrillTaxPaymentConfig.objects.select_related(
+            "owner__corporation"
+        ).order_by("owner__corporation__corporation_name")
+        context.update({
+            "drill_ownerships": drill_ownerships,
+            "unassigned_metenox": unassigned_metenox,
+            "all_metenox": all_metenox,
+            "eve_characters": eve_characters,
+            "payment_configs": payment_configs,
+            "corp_owners": StructureOwner.objects.select_related("corporation").order_by(
+                "corporation__corporation_name"
+            ),
+        })
+
     return render(request, "moonmaster/manage_owners.html", context)
 
 
@@ -478,7 +517,6 @@ def drill_tax_overview(request):
     """
     from collections import defaultdict
     from decimal import Decimal
-    from django.db.models import Sum
 
     ownerships = (
         DrillOwnership.objects
@@ -527,4 +565,368 @@ def drill_tax_overview(request):
 
     rows = sorted(by_character.values(), key=lambda x: x["character"].character_name)
     return render(request, "moonmaster/drill_tax_overview.html", {"rows": rows})
+
+
+# ---------------------------------------------------------------------------
+# Drill ownership CRUD
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("moonmaster.manage_drill_tax", raise_exception=True)
+@require_POST
+def assign_drill_owner(request):
+    """Assign a character as the owner of a Metenox structure."""
+    structure_id = request.POST.get("structure_id")
+    character_id = request.POST.get("character_id")
+    tax_rate_pct = request.POST.get("tax_rate_pct", "10")
+    notes = request.POST.get("notes", "").strip()
+
+    structure = get_object_or_404(Structure, pk=structure_id, structure_type=STRUCTURE_TYPE_METENOX)
+    character = get_object_or_404(EveCharacter, pk=character_id)
+
+    try:
+        tax_rate_pct_f = float(tax_rate_pct)
+        if not (0 <= tax_rate_pct_f <= 100):
+            raise ValueError
+    except (ValueError, TypeError):
+        messages.error(request, "Tax rate must be a number between 0 and 100.")
+        return redirect("moonmaster:manage_owners")
+
+    ownership, created = DrillOwnership.objects.update_or_create(
+        structure=structure,
+        defaults={
+            "character": character,
+            "tax_rate": tax_rate_pct_f / 100,
+            "notes": notes,
+        },
+    )
+    action = "assigned" if created else "updated"
+    messages.success(
+        request,
+        f"{character.character_name} {action} as owner of {structure.name or structure.structure_id}.",
+    )
+    return redirect("moonmaster:manage_owners")
+
+
+@login_required
+@permission_required("moonmaster.manage_drill_tax", raise_exception=True)
+@require_POST
+def remove_drill_ownership(request, pk):
+    """Remove a drill owner assignment."""
+    ownership = get_object_or_404(DrillOwnership, pk=pk)
+    name = str(ownership)
+    ownership.delete()
+    messages.success(request, f"Drill ownership removed: {name}.")
+    return redirect("moonmaster:manage_owners")
+
+
+@login_required
+@permission_required("moonmaster.manage_drill_tax", raise_exception=True)
+@require_POST
+def update_drill_ownership(request, pk):
+    """Update tax rate / notes for an existing ownership."""
+    ownership = get_object_or_404(DrillOwnership, pk=pk)
+    tax_rate_pct = request.POST.get("tax_rate_pct", "")
+    notes = request.POST.get("notes", "").strip()
+
+    try:
+        tax_rate_pct_f = float(tax_rate_pct)
+        if not (0 <= tax_rate_pct_f <= 100):
+            raise ValueError
+    except (ValueError, TypeError):
+        messages.error(request, "Tax rate must be 0–100.")
+        return redirect("moonmaster:manage_owners")
+
+    ownership.tax_rate = tax_rate_pct_f / 100
+    ownership.notes = notes
+    ownership.save(update_fields=["tax_rate", "notes", "updated_at"])
+    messages.success(request, f"Drill ownership updated for {ownership.character.character_name}.")
+    return redirect("moonmaster:manage_owners")
+
+
+# ---------------------------------------------------------------------------
+# Drill tax records — all-records view (view_drill_tax / manage_drill_tax)
+# ---------------------------------------------------------------------------
+
+@login_required
+def drill_records(request):
+    """
+    Combined view: summary by character + detailed records table.
+    Accessible to users with view_drill_tax or manage_drill_tax.
+    """
+    from collections import defaultdict
+    from decimal import Decimal
+
+    if not (
+        request.user.has_perm("moonmaster.view_drill_tax")
+        or request.user.has_perm("moonmaster.manage_drill_tax")
+    ):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied
+
+    filter_paid = request.GET.get("paid", "")      # "1" paid, "0" unpaid, "" all
+    filter_char = request.GET.get("character", "")
+
+    records_qs = DrillTaxRecord.objects.select_related(
+        "structure__moon", "structure__owner__corporation", "character"
+    ).order_by("-period_end", "character__character_name")
+
+    if filter_paid == "1":
+        records_qs = records_qs.filter(is_paid=True)
+    elif filter_paid == "0":
+        records_qs = records_qs.filter(is_paid=False)
+    if filter_char:
+        records_qs = records_qs.filter(character__character_name__icontains=filter_char)
+
+    # Per-character summary (unfiltered totals for the summary panel)
+    ownerships = DrillOwnership.objects.select_related(
+        "structure__moon", "structure__owner__corporation", "character"
+    ).order_by("character__character_name")
+
+    by_character: dict = defaultdict(lambda: {
+        "ownerships": [], "total_unpaid": Decimal("0"), "total_paid": Decimal("0"),
+    })
+    for ownership in ownerships:
+        char = ownership.character
+        entry = by_character[char.character_id]
+        entry["character"] = char
+
+        monthly_tax_est = Decimal("0")
+        if ownership.structure.moon:
+            try:
+                tax_config = getattr(ownership.structure.owner, "tax_config", None)
+            except TaxConfig.DoesNotExist:
+                tax_config = None
+            try:
+                calc = MoonProfitCalculator(ownership.structure.moon, tax_config)
+                monthly_tax_est = (
+                    calc.metenox_profit_per_month().gross_isk_per_month
+                    * Decimal(str(ownership.tax_rate))
+                )
+            except Exception:
+                monthly_tax_est = Decimal("0")
+
+        agg = DrillTaxRecord.objects.filter(
+            structure=ownership.structure, character=char
+        ).aggregate(
+            unpaid=Sum("tax_owed_isk", filter=Q(is_paid=False)),
+            paid=Sum("tax_owed_isk", filter=Q(is_paid=True)),
+        )
+        unpaid = agg["unpaid"] or Decimal("0")
+        paid = agg["paid"] or Decimal("0")
+        entry["ownerships"].append({
+            "ownership": ownership,
+            "monthly_tax_est": monthly_tax_est,
+            "unpaid_balance": unpaid,
+        })
+        entry["total_unpaid"] += unpaid
+        entry["total_paid"] += paid
+
+    summary_rows = sorted(by_character.values(), key=lambda x: x["character"].character_name)
+    all_characters = EveCharacter.objects.filter(
+        drill_tax_records__isnull=False
+    ).distinct().order_by("character_name")
+
+    return render(request, "moonmaster/drill_records.html", {
+        "records": records_qs,
+        "summary_rows": summary_rows,
+        "filter_paid": filter_paid,
+        "filter_char": filter_char,
+        "all_characters": all_characters,
+        "can_manage": request.user.has_perm("moonmaster.manage_drill_tax"),
+    })
+
+
+# ---------------------------------------------------------------------------
+# Create / mark paid — require manage_drill_tax
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("moonmaster.manage_drill_tax", raise_exception=True)
+def create_drill_tax_record(request):
+    """Create a new billing record for a drill owner."""
+    from decimal import Decimal, InvalidOperation
+
+    if request.method == "POST":
+        structure_id = request.POST.get("structure_id")
+        character_id = request.POST.get("character_id")
+        period_start = request.POST.get("period_start")
+        period_end = request.POST.get("period_end")
+        gross_str = request.POST.get("gross_value_isk", "0")
+        tax_rate_pct_str = request.POST.get("tax_rate_pct", "10")
+        notes = request.POST.get("notes", "").strip()
+
+        errors = []
+        try:
+            gross = Decimal(gross_str.replace(",", ""))
+        except InvalidOperation:
+            errors.append("Gross value must be a number.")
+            gross = Decimal("0")
+        try:
+            tax_rate = Decimal(tax_rate_pct_str) / 100
+        except InvalidOperation:
+            errors.append("Tax rate must be a number 0–100.")
+            tax_rate = Decimal("0.10")
+
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+        else:
+            structure = get_object_or_404(Structure, pk=structure_id)
+            character = get_object_or_404(EveCharacter, pk=character_id)
+            tax_owed = (gross * tax_rate).quantize(Decimal("0.01"))
+            DrillTaxRecord.objects.create(
+                structure=structure,
+                character=character,
+                period_start=period_start,
+                period_end=period_end,
+                gross_value_isk=gross,
+                tax_rate=float(tax_rate),
+                tax_owed_isk=tax_owed,
+                notes=notes,
+            )
+            messages.success(
+                request,
+                f"Billing record created: {character.character_name} owes "
+                f"{tax_owed:,.0f} ISK for {period_start} – {period_end}.",
+            )
+            return redirect("moonmaster:drill_records")
+
+    # GET — pre-fill from query params (e.g. from the manage owners page)
+    ownerships = DrillOwnership.objects.select_related(
+        "structure__moon", "structure__owner__corporation", "character"
+    ).order_by("character__character_name", "structure__name")
+    all_structures = Structure.objects.filter(
+        structure_type=STRUCTURE_TYPE_METENOX
+    ).select_related("moon", "owner__corporation").order_by("name")
+    all_chars = EveCharacter.objects.order_by("character_name")
+
+    preselect_char = request.GET.get("character", "")
+    return render(request, "moonmaster/create_drill_tax_record.html", {
+        "ownerships": ownerships,
+        "all_structures": all_structures,
+        "all_chars": all_chars,
+        "preselect_char": preselect_char,
+    })
+
+
+@login_required
+@permission_required("moonmaster.manage_drill_tax", raise_exception=True)
+@require_POST
+def mark_drill_record_paid(request, pk):
+    """Mark a single billing record as paid."""
+    record = get_object_or_404(DrillTaxRecord, pk=pk)
+    if not record.is_paid:
+        record.is_paid = True
+        record.paid_at = timezone.now()
+        record.save(update_fields=["is_paid", "paid_at"])
+        messages.success(request, f"Record #{record.pk} marked as paid.")
+    return redirect("moonmaster:drill_records")
+
+
+@login_required
+@permission_required("moonmaster.manage_drill_tax", raise_exception=True)
+@require_POST
+def mark_drill_record_unpaid(request, pk):
+    """Revert a billing record to unpaid."""
+    record = get_object_or_404(DrillTaxRecord, pk=pk)
+    if record.is_paid:
+        record.is_paid = False
+        record.paid_at = None
+        record.save(update_fields=["is_paid", "paid_at"])
+        messages.success(request, f"Record #{record.pk} reverted to unpaid.")
+    return redirect("moonmaster:drill_records")
+
+
+# ---------------------------------------------------------------------------
+# Drill tax payment config (ESI scanner settings)
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("moonmaster.manage_drill_tax", raise_exception=True)
+@require_POST
+def update_drill_tax_payment_config(request):
+    """Save or update a DrillTaxPaymentConfig for a StructureOwner."""
+    owner_pk = request.POST.get("owner_pk")
+    keyword = request.POST.get("payment_keyword", "drilling tax").strip() or "drilling tax"
+    is_enabled = request.POST.get("is_enabled") == "1"
+
+    owner = get_object_or_404(StructureOwner, pk=owner_pk)
+    config, _ = DrillTaxPaymentConfig.objects.update_or_create(
+        owner=owner,
+        defaults={"payment_keyword": keyword, "is_enabled": is_enabled},
+    )
+    messages.success(
+        request,
+        f"Payment scan config saved for {owner.corporation.corporation_name} "
+        f"(keyword: '{keyword}', enabled: {is_enabled}).",
+    )
+    return redirect("moonmaster:manage_owners")
+
+
+@login_required
+@permission_required("moonmaster.manage_drill_tax", raise_exception=True)
+@require_POST
+def trigger_drill_payment_sync(request):
+    """Manually trigger the ESI wallet payment scan."""
+    from .tasks import sync_drill_payments
+
+    config_pk = request.POST.get("config_pk")
+    if config_pk:
+        sync_drill_payments.delay(config_pk=int(config_pk))
+    else:
+        sync_drill_payments.delay()
+    messages.success(request, "Payment scan queued — results will appear shortly.")
+    return redirect("moonmaster:manage_owners")
+
+
+# ---------------------------------------------------------------------------
+# My Drill Records — for individual drill owners
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("moonmaster.basic_access", raise_exception=True)
+def my_drill_records(request):
+    """
+    Personal view for drill owners to see their own billing records.
+    Visible to any user with basic_access; shows only their own records.
+    """
+    from decimal import Decimal
+
+    main = getattr(getattr(request.user, "profile", None), "main_character", None)
+    if main is None:
+        return render(request, "moonmaster/my_drill_records.html", {
+            "records": [], "summary": {}, "no_main": True,
+        })
+
+    # Find all EveCharacter objects that belong to this user's linked characters
+    try:
+        linked_ids = list(
+            request.user.character_ownerships.values_list(
+                "character__character_id", flat=True
+            )
+        )
+    except Exception:
+        linked_ids = [main.character_id]
+
+    records = DrillTaxRecord.objects.filter(
+        character__character_id__in=linked_ids
+    ).select_related("structure__moon", "structure__owner__corporation", "character").order_by(
+        "-period_end", "structure__name"
+    )
+
+    agg = records.aggregate(
+        total_unpaid=Sum("tax_owed_isk", filter=Q(is_paid=False)),
+        total_paid=Sum("tax_owed_isk", filter=Q(is_paid=True)),
+    )
+    summary = {
+        "total_unpaid": agg["total_unpaid"] or Decimal("0"),
+        "total_paid": agg["total_paid"] or Decimal("0"),
+    }
+
+    return render(request, "moonmaster/my_drill_records.html", {
+        "records": records,
+        "summary": summary,
+        "no_main": False,
+    })
 

@@ -1058,3 +1058,130 @@ def _try_link_structure_to_moon(structure, system_id, owner):
         "Could not link structure %s (id=%s) to any moon.",
         structure, structure.structure_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Drill tax payment scanner
+# ---------------------------------------------------------------------------
+
+@shared_task(bind=True, name="moonmaster.tasks.sync_drill_payments")
+def sync_drill_payments(self, config_pk: int = None):
+    """
+    Scan the configured corporation's wallet journal (division 1) for ISK
+    donations whose ``reason`` field contains the configured keyword.
+
+    For each match, find the sender character's unpaid DrillTaxRecord entries
+    and mark them all as paid, recording the ESI journal entry ID so the same
+    entry is never processed twice.
+
+    If ``config_pk`` is provided, only that DrillTaxPaymentConfig is processed;
+    otherwise all enabled configs are processed.
+    """
+    from django.utils import timezone as tz
+    from .models import DrillTaxPaymentConfig, DrillTaxRecord, EveCharacter
+    from .providers import SCOPE_WALLET, esi_authed_get
+
+    configs = DrillTaxPaymentConfig.objects.filter(is_enabled=True).select_related(
+        "owner__corporation"
+    )
+    if config_pk is not None:
+        configs = configs.filter(pk=config_pk)
+
+    if not configs.exists():
+        logger.info("sync_drill_payments: no enabled configs, skipping.")
+        return
+
+    for config in configs:
+        owner = config.owner
+        keyword = config.payment_keyword.lower().strip()
+
+        token = owner.get_token([SCOPE_WALLET])
+        if not token:
+            logger.warning(
+                "sync_drill_payments: no wallet token for %s (scope %s). "
+                "Add a character with that scope via Manage Owners.",
+                owner, SCOPE_WALLET,
+            )
+            continue
+
+        corp_id = owner.corporation.corporation_id
+        try:
+            journal = esi_authed_get(
+                f"/corporations/{corp_id}/wallets/1/journal/", token
+            )
+        except Exception as exc:
+            logger.exception(
+                "sync_drill_payments: ESI wallet journal fetch failed for %s: %s",
+                owner, exc,
+            )
+            continue
+
+        already_processed = set(
+            DrillTaxRecord.objects.filter(
+                esi_journal_ref_id__isnull=False
+            ).values_list("esi_journal_ref_id", flat=True)
+        )
+
+        matched = 0
+        for entry in journal:
+            ref_id = entry.get("id")
+            if ref_id in already_processed:
+                continue
+
+            reason = (entry.get("reason") or "").lower()
+            if keyword not in reason:
+                continue
+
+            sender_char_id = entry.get("first_party_id")
+            if not sender_char_id:
+                continue
+
+            # Find unpaid records for this character
+            try:
+                character = EveCharacter.objects.get(character_id=sender_char_id)
+            except EveCharacter.DoesNotExist:
+                logger.debug(
+                    "sync_drill_payments: character_id %s not in EveCharacter table, skipping.",
+                    sender_char_id,
+                )
+                continue
+
+            unpaid = DrillTaxRecord.objects.filter(
+                character=character, is_paid=False
+            ).order_by("period_end")
+
+            if not unpaid.exists():
+                logger.debug(
+                    "sync_drill_payments: payment from %s matched keyword but no unpaid records found.",
+                    character.character_name,
+                )
+                continue
+
+            now = tz.now()
+            # Tag the oldest record with the ESI journal ref to deduplicate
+            first_record = unpaid.first()
+            first_record.is_paid = True
+            first_record.paid_at = now
+            first_record.esi_journal_ref_id = ref_id
+            first_record.save(update_fields=["is_paid", "paid_at", "esi_journal_ref_id"])
+            already_processed.add(ref_id)
+
+            # Mark remaining records paid (no ref_id needed — deduplication is per entry)
+            rest = unpaid.exclude(pk=first_record.pk)
+            rest_count = rest.update(is_paid=True, paid_at=now)
+
+            total_marked = 1 + rest_count
+            matched += 1
+            logger.info(
+                "sync_drill_payments: journal entry %s from %s matched keyword '%s' — "
+                "marked %d record(s) paid.",
+                ref_id, character.character_name, keyword, total_marked,
+            )
+
+        config.last_scanned_at = tz.now()
+        config.save(update_fields=["last_scanned_at"])
+
+        logger.info(
+            "sync_drill_payments: finished scan for %s — %d payment(s) matched.",
+            owner, matched,
+        )

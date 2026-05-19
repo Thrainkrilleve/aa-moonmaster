@@ -488,6 +488,10 @@ class DrillOwnership(models.Model):
         ordering = ["character__character_name", "structure__name"]
         verbose_name = _("Drill Ownership")
         verbose_name_plural = _("Drill Ownerships")
+        permissions = [
+            ("manage_drill_tax", "Can manage drill ownerships and billing records"),
+            ("view_drill_tax", "Can view all drill tax records"),
+        ]
 
     def __str__(self):
         return f"{self.character.character_name} → {self.structure.name or self.structure.structure_id}"
@@ -535,6 +539,12 @@ class DrillTaxRecord(models.Model):
 
     is_paid = models.BooleanField(default=False, verbose_name=_("Paid"))
     paid_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Paid At"))
+    # ESI wallet journal entry ID that auto-paid this record (prevents double-processing)
+    esi_journal_ref_id = models.BigIntegerField(
+        null=True, blank=True, unique=True,
+        verbose_name=_("ESI Journal Ref ID"),
+        help_text=_("Populated automatically when the ESI payment scanner matches a journal entry."),
+    )
     notes = models.TextField(blank=True, verbose_name=_("Notes"))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created"))
 
@@ -549,3 +559,45 @@ class DrillTaxRecord(models.Model):
             f"{self.character.character_name} / {self.structure.name or self.structure.structure_id}"
             f" [{self.period_start}–{self.period_end}] {status}"
         )
+
+
+class DrillTaxPaymentConfig(models.Model):
+    """
+    Configuration for the ESI wallet scanner that auto-detects drill tax payments.
+    One record per corp owner whose wallet should be monitored.
+    """
+
+    owner = models.OneToOneField(
+        StructureOwner,
+        on_delete=models.CASCADE,
+        related_name="drill_tax_payment_config",
+        verbose_name=_("Corp Owner"),
+        help_text=_("The corporation whose wallet journal is scanned for payments."),
+    )
+    payment_keyword = models.CharField(
+        max_length=100,
+        default="drilling tax",
+        verbose_name=_("Payment Keyword"),
+        help_text=_(
+            "Text to match (case-insensitive) in the ESI journal entry 'reason' field. "
+            "Players must include this text when donating ISK."
+        ),
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+        verbose_name=_("Enabled"),
+        help_text=_("Uncheck to pause automatic payment detection for this corp."),
+    )
+    last_scanned_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name=_("Last Scanned"),
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Drill Tax Payment Config")
+        verbose_name_plural = _("Drill Tax Payment Configs")
+
+    def __str__(self):
+        status = "enabled" if self.is_enabled else "disabled"
+        return f"{self.owner.corporation.corporation_name} — keyword: '{self.payment_keyword}' ({status})"

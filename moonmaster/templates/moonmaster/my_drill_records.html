@@ -1,0 +1,106 @@
+{% extends "moonmaster/base.html" %}
+{% load i18n humanize %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+  <h2><i class="fas fa-receipt me-2"></i>{% trans "My Drill Tax Records" %}</h2>
+
+  {% if no_main %}
+  <div class="alert alert-warning">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    {% trans "You don't have a main character set. Please configure your profile to see your records." %}
+  </div>
+  {% elif not records %}
+  <div class="alert alert-info">
+    <i class="fas fa-info-circle me-2"></i>
+    {% trans "No billing records are linked to your characters. If you believe this is incorrect, contact an administrator." %}
+  </div>
+  {% else %}
+
+  {# Summary bar #}
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-md-4">
+      <div class="card border-danger h-100">
+        <div class="card-body text-center">
+          <div class="h4 mb-0 text-danger">{{ summary.total_unpaid|floatformat:0|intcomma }} ISK</div>
+          <small class="text-muted">{% trans "Outstanding Balance" %}</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-md-4">
+      <div class="card border-success h-100">
+        <div class="card-body text-center">
+          <div class="h4 mb-0 text-success">{{ summary.total_paid|floatformat:0|intcomma }} ISK</div>
+          <small class="text-muted">{% trans "Total Paid (all time)" %}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if summary.total_unpaid > 0 %}
+  <div class="alert alert-warning">
+    <i class="fas fa-exclamation-circle me-2"></i>
+    <strong>{% trans "You have an outstanding balance." %}</strong>
+    {% trans "Please send the total unpaid amount to the corporation as an ISK donation. Include the payment keyword (e.g. <em>drilling tax</em>) in the reason field so it can be detected automatically." %}
+  </div>
+  {% endif %}
+
+  {# Records table #}
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>{% trans "Structure" %}</th>
+              <th>{% trans "Moon" %}</th>
+              <th>{% trans "Period" %}</th>
+              <th class="text-end">{% trans "Gross (ISK)" %}</th>
+              <th class="text-end">{% trans "Rate" %}</th>
+              <th class="text-end">{% trans "Tax Owed (ISK)" %}</th>
+              <th class="text-center">{% trans "Status" %}</th>
+              <th>{% trans "Paid At" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rec in records %}
+            <tr class="align-middle {% if rec.is_paid %}table-success{% endif %}">
+              <td>{{ rec.structure.name|default:rec.structure.structure_id }}</td>
+              <td>
+                {% if rec.structure.moon %}{{ rec.structure.moon.name }}
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="small">{{ rec.period_start }} – {{ rec.period_end }}</td>
+              <td class="text-end small">{{ rec.gross_value_isk|floatformat:0|intcomma }}</td>
+              <td class="text-end small">
+                {% widthratio rec.tax_rate 1 100 %}%
+              </td>
+              <td class="text-end fw-semibold {% if not rec.is_paid %}text-danger{% endif %}">
+                {{ rec.tax_owed_isk|floatformat:0|intcomma }}
+              </td>
+              <td class="text-center">
+                {% if rec.is_paid %}
+                  <span class="badge text-bg-success">{% trans "Paid" %}</span>
+                  {% if rec.esi_journal_ref_id %}
+                  <span class="badge text-bg-secondary ms-1" title="{% trans 'Auto-detected via ESI wallet scan' %}">
+                    <i class="fas fa-robot"></i>
+                  </span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge text-bg-danger">{% trans "Unpaid" %}</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% if rec.paid_at %}{{ rec.paid_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock moonmaster_content %}

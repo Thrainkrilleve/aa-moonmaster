@@ -160,5 +160,260 @@
       {% trans "No corporations registered yet. Click \"Add Manager\" to add one." %}
     </div>
   {% endif %}
+
+  {# ================================================================== #}
+  {# DRILL OWNERSHIP MANAGEMENT — manage_drill_tax permission           #}
+  {# ================================================================== #}
+  {% if perms.moonmaster.manage_drill_tax %}
+
+  <hr class="my-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h3><i class="fas fa-oil-can me-2"></i>{% trans "Drill Owner Assignments" %}</h3>
+    <button class="btn btn-success btn-sm" data-bs-toggle="collapse" data-bs-target="#assign-drill-form">
+      <i class="fas fa-plus me-1"></i>{% trans "Assign Owner" %}
+    </button>
+  </div>
+
+  {# Assign form #}
+  <div id="assign-drill-form" class="collapse mb-3">
+    <div class="card card-body bg-body-secondary">
+      <form method="post" action="{% url 'moonmaster:assign_drill_owner' %}">
+        {% csrf_token %}
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-4">
+            <label class="form-label small fw-semibold mb-1">{% trans "Metenox Structure" %}</label>
+            <select name="structure_id" class="form-select form-select-sm" required>
+              <option value="">-- {% trans "Select structure" %} --</option>
+              {% for s in all_metenox %}
+              <option value="{{ s.pk }}">{{ s.name|default:s.structure_id }}{% if s.moon %} — {{ s.moon.name }}{% endif %} ({{ s.owner.corporation.corporation_name }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label small fw-semibold mb-1">{% trans "Owner Character" %}</label>
+            <select name="character_id" class="form-select form-select-sm" required>
+              <option value="">-- {% trans "Select character" %} --</option>
+              {% for c in eve_characters %}
+              <option value="{{ c.pk }}">{{ c.character_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">{% trans "Tax Rate %" %}</label>
+            <input type="number" name="tax_rate_pct" step="0.1" min="0" max="100" value="10"
+                   class="form-control form-control-sm" required>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">{% trans "Notes" %}</label>
+            <input type="text" name="notes" class="form-control form-control-sm" placeholder="{% trans 'Optional' %}">
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="fas fa-save me-1"></i>{% trans "Save" %}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# Existing assignments #}
+  {% if drill_ownerships %}
+  <div class="card mb-4">
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>{% trans "Owner Character" %}</th>
+            <th>{% trans "Structure" %}</th>
+            <th>{% trans "Moon" %}</th>
+            <th>{% trans "Corp" %}</th>
+            <th class="text-end">{% trans "Tax Rate" %}</th>
+            <th>{% trans "Notes" %}</th>
+            <th class="text-end">{% trans "Actions" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ownership in drill_ownerships %}
+          <tr>
+            <td>
+              <img src="https://images.evetech.net/characters/{{ ownership.character.character_id }}/portrait?size=32"
+                   class="rounded-circle me-1" alt="" width="32" height="32">
+              {{ ownership.character.character_name }}
+            </td>
+            <td>{{ ownership.structure.name|default:ownership.structure.structure_id }}</td>
+            <td>
+              {% if ownership.structure.moon %}
+                {{ ownership.structure.moon.name }}
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td>{{ ownership.structure.owner.corporation.corporation_name }}</td>
+            <td class="text-end">
+              {# inline edit form #}
+              <button class="btn btn-xs btn-outline-secondary py-0 px-1"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#edit-ownership-{{ ownership.pk }}"
+                      style="font-size:0.75rem;">
+                {{ ownership.tax_rate_pct }}%&nbsp;<i class="fas fa-pencil-alt"></i>
+              </button>
+            </td>
+            <td><small class="text-muted">{{ ownership.notes|default:"—" }}</small></td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{% url 'moonmaster:create_drill_tax_record' %}?character={{ ownership.character.pk }}">
+                <i class="fas fa-file-invoice-dollar"></i>
+              </a>
+              <form method="post" action="{% url 'moonmaster:remove_drill_ownership' ownership.pk %}"
+                    class="d-inline"
+                    onsubmit="return confirm('{% trans "Remove this drill owner assignment?" %}')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="fas fa-times"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {# inline edit row #}
+          <tr id="edit-ownership-{{ ownership.pk }}" class="collapse bg-body-secondary">
+            <td colspan="7" class="py-2 px-3">
+              <form method="post" action="{% url 'moonmaster:update_drill_ownership' ownership.pk %}"
+                    class="d-flex gap-2 align-items-end flex-wrap">
+                {% csrf_token %}
+                <div>
+                  <label class="form-label small mb-1">{% trans "Tax Rate %" %}</label>
+                  <input type="number" name="tax_rate_pct" step="0.1" min="0" max="100"
+                         value="{{ ownership.tax_rate_pct }}"
+                         class="form-control form-control-sm" style="width:100px;" required>
+                </div>
+                <div class="flex-grow-1">
+                  <label class="form-label small mb-1">{% trans "Notes" %}</label>
+                  <input type="text" name="notes" value="{{ ownership.notes }}"
+                         class="form-control form-control-sm">
+                </div>
+                <div>
+                  <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-save me-1"></i>{% trans "Update" %}
+                  </button>
+                </div>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-info">
+    {% trans "No drill owner assignments yet. Use the button above to assign an owner to a Metenox structure." %}
+  </div>
+  {% endif %}
+
+  {# ================================================================== #}
+  {# ESI PAYMENT SCAN CONFIG                                             #}
+  {# ================================================================== #}
+  <hr class="my-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h3><i class="fas fa-wallet me-2"></i>{% trans "ESI Payment Scanner" %}</h3>
+    <form method="post" action="{% url 'moonmaster:trigger_drill_payment_sync' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-success btn-sm">
+        <i class="fas fa-search-dollar me-1"></i>{% trans "Scan Now" %}
+      </button>
+    </form>
+  </div>
+  <p class="text-muted small mb-3">
+    {% trans "The scanner reads the configured corporation's wallet journal (division 1) and automatically marks drill tax records as paid when it finds a donation whose <em>reason</em> field contains the keyword." %}
+  </p>
+
+  {% for config in payment_configs %}
+  <div class="card mb-2">
+    <div class="card-body p-3">
+      <form method="post" action="{% url 'moonmaster:update_drill_tax_payment_config' %}">
+        {% csrf_token %}
+        <input type="hidden" name="owner_pk" value="{{ config.owner.pk }}">
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-4">
+            <strong>{{ config.owner.corporation.corporation_name }}</strong>
+            {% if config.last_scanned_at %}
+            <div class="text-muted small">{% trans "Last scanned:" %} {{ config.last_scanned_at|date:"Y-m-d H:i" }} UTC</div>
+            {% else %}
+            <div class="text-muted small">{% trans "Never scanned" %}</div>
+            {% endif %}
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label small mb-1">{% trans "Payment Keyword" %}</label>
+            <input type="text" name="payment_keyword" value="{{ config.payment_keyword }}"
+                   class="form-control form-control-sm" required>
+          </div>
+          <div class="col-auto">
+            <label class="form-label small mb-1 d-block">{% trans "Enabled" %}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="is_enabled" value="1"
+                     {% if config.is_enabled %}checked{% endif %} id="scan-enabled-{{ config.pk }}">
+              <label class="form-check-label" for="scan-enabled-{{ config.pk }}">{% trans "Active" %}</label>
+            </div>
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="fas fa-save me-1"></i>{% trans "Save" %}
+            </button>
+          </div>
+          <div class="col-auto">
+            <form method="post" action="{% url 'moonmaster:trigger_drill_payment_sync' %}" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="config_pk" value="{{ config.pk }}">
+              <button type="submit" class="btn btn-outline-success btn-sm">
+                <i class="fas fa-sync me-1"></i>{% trans "Scan This Corp" %}
+              </button>
+            </form>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% empty %}
+  <div class="alert alert-secondary">
+    {% trans "No payment scan configs yet. Add a corp below to start tracking payments." %}
+  </div>
+  {% endfor %}
+
+  {# Add new config for a corp that doesn't have one yet #}
+  {% with unconfigured=corp_owners %}
+  {% if unconfigured %}
+  <div class="card mt-2">
+    <div class="card-header small fw-semibold">{% trans "Add Payment Scanner for Corp" %}</div>
+    <div class="card-body p-3">
+      <form method="post" action="{% url 'moonmaster:update_drill_tax_payment_config' %}">
+        {% csrf_token %}
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-md-4">
+            <label class="form-label small mb-1">{% trans "Corporation" %}</label>
+            <select name="owner_pk" class="form-select form-select-sm" required>
+              <option value="">-- {% trans "Pick corp" %} --</option>
+              {% for owner in unconfigured %}
+              <option value="{{ owner.pk }}">{{ owner.corporation.corporation_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label small mb-1">{% trans "Keyword" %}</label>
+            <input type="text" name="payment_keyword" value="drilling tax"
+                   class="form-control form-control-sm" required>
+          </div>
+          <div class="col-auto">
+            <input type="hidden" name="is_enabled" value="1">
+            <button type="submit" class="btn btn-success btn-sm">
+              <i class="fas fa-plus me-1"></i>{% trans "Add" %}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  {% endif %}{# end manage_drill_tax #}
 </div>
 {% endblock moonmaster_content %}

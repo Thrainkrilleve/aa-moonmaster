@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import (
     DrillOwnership,
+    DrillTaxPaymentConfig,
     DrillTaxRecord,
     Extraction,
     MiningLedgerEntry,
@@ -132,7 +133,7 @@ class DrillTaxRecordAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_paid", "structure__owner__corporation", "character")
     search_fields = ("character__character_name", "structure__name")
-    readonly_fields = ("created_at",)
+    readonly_fields = ("created_at", "esi_journal_ref_id")
     date_hierarchy = "period_end"
     actions = [_action_mark_paid]
     autocomplete_fields = ("character", "structure")
@@ -140,3 +141,10 @@ class DrillTaxRecordAdmin(admin.ModelAdmin):
     @admin.display(description=_("Tax Rate"))
     def tax_rate_pct(self, obj):
         return f"{obj.tax_rate * 100:.1f}%"
+
+
+@admin.register(DrillTaxPaymentConfig)
+class DrillTaxPaymentConfigAdmin(admin.ModelAdmin):
+    list_display = ("owner", "payment_keyword", "is_enabled", "last_scanned_at", "updated_at")
+    list_filter = ("is_enabled",)
+    search_fields = ("owner__corporation__corporation_name", "payment_keyword")

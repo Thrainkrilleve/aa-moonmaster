@@ -24,6 +24,20 @@ urlpatterns = [
     path("survey/import/", views.import_survey, name="import_survey"),
     # Drill owner tax overview
     path("drill-tax/", views.drill_tax_overview, name="drill_tax_overview"),
+    # Drill records (view_drill_tax / manage_drill_tax)
+    path("drill-tax/records/", views.drill_records, name="drill_records"),
+    path("drill-tax/records/create/", views.create_drill_tax_record, name="create_drill_tax_record"),
+    path("drill-tax/records/<int:pk>/pay/", views.mark_drill_record_paid, name="mark_drill_record_paid"),
+    path("drill-tax/records/<int:pk>/unpay/", views.mark_drill_record_unpaid, name="mark_drill_record_unpaid"),
+    # My records (basic_access)
+    path("drill-tax/my-records/", views.my_drill_records, name="my_drill_records"),
+    # Drill ownership CRUD (manage_drill_tax)
+    path("drill-tax/ownership/assign/", views.assign_drill_owner, name="assign_drill_owner"),
+    path("drill-tax/ownership/<int:pk>/remove/", views.remove_drill_ownership, name="remove_drill_ownership"),
+    path("drill-tax/ownership/<int:pk>/update/", views.update_drill_ownership, name="update_drill_ownership"),
+    # Payment config (manage_drill_tax)
+    path("drill-tax/payment-config/save/", views.update_drill_tax_payment_config, name="update_drill_tax_payment_config"),
+    path("drill-tax/payment-config/sync/", views.trigger_drill_payment_sync, name="trigger_drill_payment_sync"),
     # AJAX / API endpoints
     path("api/moon/<int:moon_id>/profitability/", views.moon_profitability_api, name="moon_profitability_api"),
     path("api/prices/refresh/", views.refresh_prices_api, name="refresh_prices_api"),

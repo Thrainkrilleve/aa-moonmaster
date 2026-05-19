@@ -68,6 +68,10 @@ class MoonMasterConfig(AppConfig):
             "task": "moonmaster.tasks.sync_mining_ledger",
             "schedule": crontab(minute=0),
         }
+        schedule["moonmaster.sync_drill_payments"] = {
+            "task": "moonmaster.tasks.sync_drill_payments",
+            "schedule": crontab(minute="*/30"),
+        }
 
 
         # AA v4 uses a DB-driven, cache-guarded menu sync.  Once the cache key

@@ -21,8 +21,11 @@
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:structure_list' %}">{% trans "Structures" %}</a></li>
       {% if perms.moonmaster.view_reports %}
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:reports' %}">{% trans "Reports" %}</a></li>
-      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:drill_tax_overview' %}">{% trans "Drill Tax" %}</a></li>
       {% endif %}
+      {% if perms.moonmaster.view_drill_tax or perms.moonmaster.manage_drill_tax %}
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:drill_records' %}">{% trans "Drill Records" %}</a></li>
+      {% endif %}
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:my_drill_records' %}">{% trans "My Records" %}</a></li>
       {% if perms.moonmaster.manage_moons %}
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:manage_owners' %}">{% trans "Manage Owners" %}</a></li>
       {% endif %}
