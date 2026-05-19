@@ -1,7 +1,10 @@
 from django.contrib import admin
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from .models import (
+    DrillOwnership,
+    DrillTaxRecord,
     Extraction,
     MiningLedgerEntry,
     Moon,
@@ -30,6 +33,14 @@ class StructureInline(admin.TabularInline):
     model = Structure
     extra = 0
     fields = ("structure_id", "name", "structure_type", "is_online", "fuel_expires", "goo_bay_fill_pct")
+    readonly_fields = ("updated_at",)
+
+
+@admin.register(Structure)
+class StructureAdmin(admin.ModelAdmin):
+    list_display = ("name", "structure_type", "owner", "is_online", "fuel_expires", "goo_bay_fill_pct")
+    list_filter = ("structure_type", "owner__corporation", "is_online")
+    search_fields = ("name", "structure_id")
     readonly_fields = ("updated_at",)
 
 
@@ -87,3 +98,45 @@ class OrePriceAdmin(admin.ModelAdmin):
     list_filter = ("source",)
     search_fields = ("type_id", "type_name")
     readonly_fields = ("updated_at",)
+
+
+# ---------------------------------------------------------------------------
+# Drill owner tax system
+# ---------------------------------------------------------------------------
+
+@admin.register(DrillOwnership)
+class DrillOwnershipAdmin(admin.ModelAdmin):
+    list_display = ("character", "structure", "tax_rate_pct", "notes", "updated_at")
+    list_filter = ("structure__owner__corporation",)
+    search_fields = ("character__character_name", "structure__name")
+    autocomplete_fields = ("character",)
+    readonly_fields = ("created_at", "updated_at")
+
+    @admin.display(description=_("Tax Rate"))
+    def tax_rate_pct(self, obj):
+        return f"{obj.tax_rate * 100:.1f}%"
+
+
+def _action_mark_paid(modeladmin, request, queryset):
+    updated = queryset.filter(is_paid=False).update(is_paid=True, paid_at=timezone.now())
+    modeladmin.message_user(request, f"{updated} record(s) marked as paid.")
+
+_action_mark_paid.short_description = _("Mark selected records as paid")
+
+
+@admin.register(DrillTaxRecord)
+class DrillTaxRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "character", "structure", "period_start", "period_end",
+        "gross_value_isk", "tax_rate_pct", "tax_owed_isk", "is_paid", "paid_at",
+    )
+    list_filter = ("is_paid", "structure__owner__corporation", "character")
+    search_fields = ("character__character_name", "structure__name")
+    readonly_fields = ("created_at",)
+    date_hierarchy = "period_end"
+    actions = [_action_mark_paid]
+    autocomplete_fields = ("character", "structure")
+
+    @admin.display(description=_("Tax Rate"))
+    def tax_rate_pct(self, obj):
+        return f"{obj.tax_rate * 100:.1f}%"

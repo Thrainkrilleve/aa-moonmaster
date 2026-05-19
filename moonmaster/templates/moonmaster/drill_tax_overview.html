@@ -1,0 +1,95 @@
+{% extends "moonmaster/base.html" %}
+{% load i18n humanize %}
+
+{% block moonmaster_content %}
+<div class="container-fluid">
+  <h2><i class="fas fa-coins me-2"></i>{% trans "Drill Owner Tax Overview" %}</h2>
+  <p class="text-muted mb-4">
+    {% trans "Estimated monthly tax and outstanding balances per drill owner. Create billing records via the admin panel." %}
+  </p>
+
+  {% if not rows %}
+    <div class="alert alert-info">
+      {% trans "No drill ownerships configured yet. Assign owners via the admin panel under <strong>Drill Ownerships</strong>." %}
+    </div>
+  {% else %}
+    {% for row in rows %}
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-bold fs-5">
+          <i class="fas fa-user me-1"></i>{{ row.character.character_name }}
+        </span>
+        <span class="badge {% if row.total_unpaid > 0 %}bg-danger{% else %}bg-success{% endif %} fs-6">
+          {% trans "Unpaid:" %} {{ row.total_unpaid|floatformat:0|intcomma }} ISK
+        </span>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>{% trans "Structure" %}</th>
+              <th>{% trans "Moon" %}</th>
+              <th>{% trans "Owner Corp" %}</th>
+              <th class="text-end">{% trans "Tax Rate" %}</th>
+              <th class="text-end">{% trans "Est. Monthly Tax (ISK)" %}</th>
+              <th class="text-end">{% trans "Unpaid Balance (ISK)" %}</th>
+              <th class="text-center">{% trans "Billing Records" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in row.ownerships %}
+            {% with o=item.ownership %}
+            <tr class="align-middle">
+              <td class="fw-semibold">{{ o.structure.name|default:o.structure.structure_id }}</td>
+              <td>
+                {% if o.structure.moon %}
+                  <a href="{% url 'moonmaster:moon_detail' o.structure.moon.pk %}">
+                    {{ o.structure.moon.name }}
+                  </a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>{{ o.structure.owner.corporation.corporation_name }}</td>
+              <td class="text-end">{{ o.tax_rate_pct }}%</td>
+              <td class="text-end">
+                {% if item.monthly_tax_est %}
+                  {{ item.monthly_tax_est|floatformat:0|intcomma }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-end {% if item.unpaid_balance > 0 %}text-danger fw-bold{% endif %}">
+                {{ item.unpaid_balance|floatformat:0|intcomma }}
+              </td>
+              <td class="text-center">
+                <a class="btn btn-sm btn-outline-secondary"
+                   href="/admin/moonmaster/drilltaxrecord/?structure__id__exact={{ o.structure.pk }}&character__id__exact={{ o.character.pk }}">
+                  {% trans "View Records" %}
+                </a>
+              </td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+          </tbody>
+          <tfoot class="table-secondary fw-bold">
+            <tr>
+              <td colspan="5" class="text-end">{% trans "Total Unpaid:" %}</td>
+              <td class="text-end {% if row.total_unpaid > 0 %}text-danger{% endif %}">
+                {{ row.total_unpaid|floatformat:0|intcomma }} ISK
+              </td>
+              <td class="text-center">
+                <a class="btn btn-sm btn-primary"
+                   href="/admin/moonmaster/drilltaxrecord/add/?character={{ row.character.pk }}">
+                  <i class="fas fa-plus me-1"></i>{% trans "Add Record" %}
+                </a>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  {% endif %}
+</div>
+{% endblock moonmaster_content %}

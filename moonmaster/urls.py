@@ -22,6 +22,8 @@ urlpatterns = [
     path("owners/<int:owner_id>/tax/", views.update_tax_config, name="update_tax_config"),
     # Moon survey import
     path("survey/import/", views.import_survey, name="import_survey"),
+    # Drill owner tax overview
+    path("drill-tax/", views.drill_tax_overview, name="drill_tax_overview"),
     # AJAX / API endpoints
     path("api/moon/<int:moon_id>/profitability/", views.moon_profitability_api, name="moon_profitability_api"),
     path("api/prices/refresh/", views.refresh_prices_api, name="refresh_prices_api"),

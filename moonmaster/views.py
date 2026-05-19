@@ -13,7 +13,7 @@ from esi.decorators import token_required
 from allianceauth.eveonline.models import EveCharacter, EveCorporationInfo
 
 from .calculator import MoonProfitCalculator
-from .models import Extraction, Moon, OwnerCharacter, Structure, StructureOwner, TaxConfig
+from .models import DrillOwnership, DrillTaxRecord, Extraction, Moon, OwnerCharacter, Structure, StructureOwner, TaxConfig
 from .constants import PRICE_SOURCE_ESI, STRUCTURE_TYPE_METENOX, STRUCTURE_TYPE_ATHANOR, REINFORCE_STATES
 
 
@@ -463,3 +463,68 @@ def import_survey(request):
         )
         return redirect("moonmaster:moon_list")
     return render(request, "moonmaster/import_survey.html", {})
+
+
+# ---------------------------------------------------------------------------
+# Drill owner tax overview
+# ---------------------------------------------------------------------------
+
+@login_required
+@permission_required("moonmaster.view_reports", raise_exception=True)
+def drill_tax_overview(request):
+    """
+    Summary view showing every Metenox drill owner, their drills, estimated
+    monthly tax, and outstanding (unpaid) balance.
+    """
+    from collections import defaultdict
+    from decimal import Decimal
+    from django.db.models import Sum
+
+    ownerships = (
+        DrillOwnership.objects
+        .select_related(
+            "structure__moon",
+            "structure__owner__corporation",
+            "character",
+        )
+        .order_by("character__character_name", "structure__name")
+    )
+
+    by_character: dict = defaultdict(lambda: {"ownerships": [], "total_unpaid": Decimal("0")})
+
+    for ownership in ownerships:
+        char = ownership.character
+        entry = by_character[char.character_id]
+        entry["character"] = char
+
+        # Estimated monthly tax from MoonProfitCalculator (based on ore composition)
+        monthly_tax_est = Decimal("0")
+        if ownership.structure.moon:
+            try:
+                tax_config = getattr(ownership.structure.owner, "tax_config", None)
+            except TaxConfig.DoesNotExist:
+                tax_config = None
+            try:
+                calc = MoonProfitCalculator(ownership.structure.moon, tax_config)
+                metenox_result = calc.metenox_profit_per_month()
+                monthly_tax_est = metenox_result.gross_isk_per_month * Decimal(str(ownership.tax_rate))
+            except Exception:
+                monthly_tax_est = Decimal("0")
+
+        # Outstanding (unpaid) ISK balance for this drill
+        unpaid = (
+            DrillTaxRecord.objects
+            .filter(structure=ownership.structure, character=char, is_paid=False)
+            .aggregate(total=Sum("tax_owed_isk"))["total"]
+        ) or Decimal("0")
+
+        entry["ownerships"].append({
+            "ownership": ownership,
+            "monthly_tax_est": monthly_tax_est,
+            "unpaid_balance": unpaid,
+        })
+        entry["total_unpaid"] += unpaid
+
+    rows = sorted(by_character.values(), key=lambda x: x["character"].character_name)
+    return render(request, "moonmaster/drill_tax_overview.html", {"rows": rows})
+

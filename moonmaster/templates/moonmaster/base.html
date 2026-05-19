@@ -21,6 +21,7 @@
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:structure_list' %}">{% trans "Structures" %}</a></li>
       {% if perms.moonmaster.view_reports %}
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:reports' %}">{% trans "Reports" %}</a></li>
+      <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:drill_tax_overview' %}">{% trans "Drill Tax" %}</a></li>
       {% endif %}
       {% if perms.moonmaster.manage_moons %}
       <li class="nav-item"><a class="nav-link" href="{% url 'moonmaster:manage_owners' %}">{% trans "Manage Owners" %}</a></li>

@@ -454,3 +454,98 @@ class OrePrice(models.Model):
 
     def __str__(self):
         return f"{self.type_name or self.type_id} @ {self.avg_price} ISK ({self.source})"
+
+
+class DrillOwnership(models.Model):
+    """
+    Links a Metenox structure to the individual character who placed it.
+    Used to track who owes tax on each passive-harvest drill.
+    """
+
+    structure = models.OneToOneField(
+        Structure,
+        on_delete=models.CASCADE,
+        related_name="drill_ownership",
+        limit_choices_to={"structure_type": "metenox"},
+        verbose_name=_("Structure"),
+    )
+    character = models.ForeignKey(
+        EveCharacter,
+        on_delete=models.CASCADE,
+        related_name="owned_drills",
+        verbose_name=_("Drill Owner"),
+    )
+    tax_rate = models.FloatField(
+        default=0.10,
+        verbose_name=_("Tax Rate"),
+        help_text=_("Fraction of gross goo value charged as tax (0.0–1.0). E.g. 0.10 = 10%."),
+    )
+    notes = models.TextField(blank=True, verbose_name=_("Notes"))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["character__character_name", "structure__name"]
+        verbose_name = _("Drill Ownership")
+        verbose_name_plural = _("Drill Ownerships")
+
+    def __str__(self):
+        return f"{self.character.character_name} → {self.structure.name or self.structure.structure_id}"
+
+    @property
+    def tax_rate_pct(self) -> float:
+        """Tax rate expressed as a percentage (e.g. 10.0 for 10%)."""
+        return round(self.tax_rate * 100, 1)
+
+
+class DrillTaxRecord(models.Model):
+    """
+    A billing record for one Metenox over a defined period.
+    Admin creates these when billing drill owners; marks them paid when ISK is received.
+    """
+
+    structure = models.ForeignKey(
+        Structure,
+        on_delete=models.CASCADE,
+        related_name="tax_records",
+        verbose_name=_("Structure"),
+    )
+    character = models.ForeignKey(
+        EveCharacter,
+        on_delete=models.CASCADE,
+        related_name="drill_tax_records",
+        verbose_name=_("Drill Owner"),
+    )
+
+    period_start = models.DateField(verbose_name=_("Period Start"))
+    period_end = models.DateField(verbose_name=_("Period End"))
+
+    # Gross goo value for the period (e.g. from actual sale proceeds)
+    gross_value_isk = models.DecimalField(
+        max_digits=22, decimal_places=2,
+        verbose_name=_("Gross Goo Value (ISK)"),
+    )
+    # Snapshot of the tax rate at billing time
+    tax_rate = models.FloatField(verbose_name=_("Tax Rate (snapshot)"))
+    # Computed: gross_value_isk × tax_rate
+    tax_owed_isk = models.DecimalField(
+        max_digits=22, decimal_places=2,
+        verbose_name=_("Tax Owed (ISK)"),
+    )
+
+    is_paid = models.BooleanField(default=False, verbose_name=_("Paid"))
+    paid_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Paid At"))
+    notes = models.TextField(blank=True, verbose_name=_("Notes"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created"))
+
+    class Meta:
+        ordering = ["-period_end", "character__character_name"]
+        verbose_name = _("Drill Tax Record")
+        verbose_name_plural = _("Drill Tax Records")
+
+    def __str__(self):
+        status = "PAID" if self.is_paid else "UNPAID"
+        return (
+            f"{self.character.character_name} / {self.structure.name or self.structure.structure_id}"
+            f" [{self.period_start}–{self.period_end}] {status}"
+        )
