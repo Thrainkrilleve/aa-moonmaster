@@ -819,7 +819,11 @@ def _sync_metenox_bays(owner):
 
     assets_token = owner.get_token([SCOPE_ASSETS])
     if not assets_token:
-        logger.debug("_sync_metenox_bays: no assets token for %s — skipping.", owner)
+        logger.warning(
+            "_sync_metenox_bays: no valid ESI token with assets scope for %s — "
+            "re-add the owner via the UI to grant esi-assets.read_corporation_assets.v1.",
+            owner,
+        )
         return
 
     corp_id = owner.corporation.corporation_id
@@ -829,8 +833,32 @@ def _sync_metenox_bays(owner):
         logger.warning("_sync_metenox_bays: assets fetch failed for %s: %s", owner, exc)
         return
 
+    logger.info(
+        "_sync_metenox_bays: ESI returned %d total asset entries for corp %s.",
+        len(assets), corp_id,
+    )
+
     # Collect items in MoonMaterialBay and gather their type IDs
     bay_items = [a for a in assets if a.get("location_flag") == "MoonMaterialBay"]
+
+    if not bay_items and assets:
+        # Log a sample of actual flags so we can spot the right one if CCP ever
+        # changes the flag name or uses something unexpected.
+        from collections import Counter
+        flag_counts = Counter(a.get("location_flag", "") for a in assets)
+        sample = dict(flag_counts.most_common(20))
+        logger.warning(
+            "_sync_metenox_bays: found 0 items with location_flag='MoonMaterialBay' "
+            "for %s (corp %s) — bay fill will be set to 0%% for all Metenox structures. "
+            "Run 'python manage.py moonmaster_debug_assets' to inspect what ESI actually "
+            "returns. Top location_flags in this response: %s",
+            owner, corp_id, sample,
+        )
+    else:
+        logger.info(
+            "_sync_metenox_bays: found %d bay item(s) with location_flag='MoonMaterialBay' for %s.",
+            len(bay_items), owner,
+        )
 
     # Build a volume + name map: type_id → {volume, name}, resolved from SDE
     type_ids = {item.get("type_id", 0) for item in bay_items}
@@ -899,7 +927,11 @@ def _sync_metenox_bays(owner):
             goo_bay_fill_pct=round(fill_pct, 1),
             goo_bay_contents=contents,
         )
-    logger.debug("_sync_metenox_bays: updated bay fill for %d Metenox(es) under %s.", len(metenox_sids), owner)
+    logger.info(
+        "_sync_metenox_bays: updated goo_bay_fill_pct for %d Metenox(es) under %s "
+        "(bay items found: %d).",
+        len(metenox_sids), owner, len(bay_items),
+    )
 
 
 def _try_link_structure_to_moon(structure, system_id, owner):
